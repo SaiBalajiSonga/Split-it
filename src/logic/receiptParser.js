@@ -21,7 +21,7 @@ import { classifyItemFast } from './categorizer.js';
 // Matches a price at or near the end of a line (allows optional short trailing OCR noise like "200.00 ha", "225.00 Bo", "325.00 v", "360.00 |")
 // Uses negative lookbehind (?<!\d) so it never slices the tail of an alphanumeric ID or phone number
 // CRITICAL: (?!\s*%) prevents matching percentage rates (e.g. 5.80%, 10%, 25%, 12.5%) as currency prices!
-const PRICE_REGEX = /(?:₹|rs\.?|inr\.?|rupees?)?\s*(?<!\d)(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)(?!\s*%)\s*(?:[a-zA-Z]{1,5}|[^\w\s%]{1,5})?\s*$/i;
+const PRICE_REGEX = /(?:₹|rs\.?|inr\.?|rupees?)?\s*(?<!\d)(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)(?!\s*%)(?:\s+(?:[a-zA-Z]{1,8}|[^\w\s%]{1,6}|\+\d{1,2}|[=\-,:~*#\^]))?\s*$/i;
 
 // Matches a price anywhere in the line (not followed by %)
 const PRICE_ANYWHERE = /(?:₹|rs\.?|inr\.?)\s*(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)(?!\s*%)/gi;
@@ -30,7 +30,7 @@ const PRICE_ANYWHERE = /(?:₹|rs\.?|inr\.?)\s*(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2}
 const QTY_REGEX = /(?:^|\s)(\d+)\s*[xX×]\s*|[xX×]\s*(\d+)(?:\s|$)|(?:qty|quantity)\s*[:.]?\s*(\d+)/i;
 
 // Two-number pattern: "2 x 150.00 300.00" or "2 150 300" (qty is bounded 1-100, requires whitespace before qty)
-const QTY_PRICE_TOTAL = /(?:^|\s)(\d{1,3})\s*[xX×]?\s*(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)\s+(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)\s*(?:[a-zA-Z]{1,5}|[^\w\s%]{1,5})?\s*$/i;
+const QTY_PRICE_TOTAL = /(?:^|\s)(\d{1,3})\s*[xX×]?\s*(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)\s+(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)(?!\s*%)(?:\s+(?:[a-zA-Z]{1,8}|[^\w\s%]{1,6}|\+\d{1,2}|[=\-,:~*#\^]))?\s*$/i;
 
 // Tax keywords (including CGST, SGST, SGT, IGST, VAT, Service Tax, and '% on' phrases)
 const TAX_KEYWORDS = /\b(c\.?g\.?s\.?t|s\.?g\.?s\.?t|i\.?g\.?s\.?t|g\.?s\.?t|sgt\b|cgst\b|sgst\b|ses[t1]\b|service\s*tax|tax|vat)\b|%\s*on\b/i;

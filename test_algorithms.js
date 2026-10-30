@@ -335,6 +335,54 @@ assert(groceryReceipt.items.find(i => i.name.includes('Cinema'))?.category === '
 assert(groceryReceipt.items.find(i => i.name.includes('Wi-Fi'))?.category === 'Utilities', 'Wi-Fi -> Utilities');
 assert(groceryReceipt.items.find(i => i.name.includes('Pen'))?.category === 'Other', 'Pen -> Other');
 
+console.log(`\n[12] Noisy Real-World Bombay Canteen OCR with Specular Highlights & Margin Noise:`);
+const noisyBombayOCR = `FHEREPRINT*##
+Tel /02249666666 Rs
+THE BOMBAY CANTEEN oat
+INDIAN CAFE & BAR fe ass
+Facebook /thebombaycanteen v fo
+Twitter /bombay_canteen 9
+Instagram /thebombaycanteen &
+BILL NO 100047224 TABLE :20 = ok
+BILL DATE :21/05/2016 COVERS:2 SEAS
+BILL TIME :15:49 SHIFT Ng
+QTY DESCRIPTION AMOUNT BS
+<
+mT Teen + ni
+1 MASALA COKE 200.00 ih
+1 Tz's ELIXIR 200.00 wi
+1 CHETTINAD PRAWNS ALI-YOL400.00 po
+1 B**F FRY 375.00 +4
+3 MALABAR PARATHA 270.00
+1 BARLEY SALAD 225.00 =
+1 mutton curry 325.00
+1 COFFEE RASGULLA 350.00
+1 MANGO TRIFLE (SINGLE) 150.00
+sub Total 2495.00
+Service charge 10% 249.50
+service Tax 5.80% 159.18
+VAT ON CARB BEV 25% 55.00
+VAT ON FOOD 12.5% 315.56
+Adjustments 0.76
+Gross Amount 3275.00
+VAT NO: 27965280003v
+S.T.NO: AADCH3020RSD001
+CHINTU, CHHOTA AND BADA
+SAY THANK YOU AND HOPE
+THAT YOU COME BACK SOON!
+CASHIER : ANAND`;
+
+const noisyParsed = parseReceipt(noisyBombayOCR);
+assert(noisyParsed.items.length === 9, `Detected all 9 food/beverage items despite margin noise (got ${noisyParsed.items.length})`);
+assert(noisyParsed.items.find(i => i.name.includes('B**F FRY'))?.totalPaise === 37500, 'Detected B**F FRY ₹375.00');
+assert(noisyParsed.items.find(i => i.name.includes('MALABAR PARATHA'))?.qty === 3, 'Detected 3x MALABAR PARATHA');
+assert(noisyParsed.serviceCharge === 24950, `Detected Service Charge ₹249.50 (got ${noisyParsed.serviceCharge})`);
+assert(noisyParsed.taxes.length === 3, `Detected 3 VAT/Service taxes (got ${noisyParsed.taxes.length})`);
+assert(noisyParsed.roundoff === 76, `Detected Adjustments ₹0.76 (got ${noisyParsed.roundoff})`);
+assert(noisyParsed.total === 327500, `Detected Gross Total ₹3,275.00 (got ${noisyParsed.total})`);
+const noisyVal = validateTotal(noisyParsed);
+assert(noisyVal.valid === true, `Validation passes with ₹0 discrepancy (${noisyVal.message})`);
+
 console.log(`\n========================================`);
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
 console.log(`========================================\n`);

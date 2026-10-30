@@ -30,15 +30,138 @@ export async function preprocessImage(source) {
   canvas.width = width;
   canvas.height = height;
   
-  // Draw scaled image cleanly with smooth anti-aliased rendering and gentle contrast boost for thermal receipts
+  // Draw scaled image cleanly with smooth anti-aliased rendering
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  if (ctx.filter !== undefined) {
-    ctx.filter = 'contrast(1.15) brightness(1.02)';
-  }
   ctx.drawImage(img, 0, 0, width, height);
 
+  // Auto-detect receipt paper boundaries to crop away dark tables, shadows, and reflections
+  const bounds = detectReceiptBounds(ctx, width, height);
+  if (bounds) {
+    const croppedCanvas = document.createElement('canvas');
+    const croppedCtx = croppedCanvas.getContext('2d');
+    croppedCanvas.width = bounds.width;
+    croppedCanvas.height = bounds.height;
+    croppedCtx.imageSmoothingEnabled = true;
+    croppedCtx.imageSmoothingQuality = 'high';
+    if (croppedCtx.filter !== undefined) {
+      croppedCtx.filter = 'contrast(1.18) brightness(1.02)';
+    }
+    croppedCtx.drawImage(
+      canvas,
+      bounds.x, bounds.y, bounds.width, bounds.height,
+      0, 0, bounds.width, bounds.height
+    );
+    return croppedCanvas.toDataURL('image/jpeg', 0.94);
+  }
+
+  if (ctx.filter !== undefined) {
+    ctx.filter = 'contrast(1.18) brightness(1.02)';
+    ctx.drawImage(img, 0, 0, width, height);
+  }
+
   return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+/**
+ * Detect the bright paper bounding box of a receipt sitting on a darker table/background.
+ * Discards table glare, reflections, and dark borders that corrupt OCR readings.
+ */
+function detectReceiptBounds(ctx, width, height) {
+  try {
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+
+    // Sample pixels to compute histogram
+    const step = 8;
+    const lums = [];
+    for (let y = 0; y < height; y += step) {
+      const yOff = y * width * 4;
+      for (let x = 0; x < width; x += step) {
+        const idx = yOff + x * 4;
+        const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        lums.push(lum);
+      }
+    }
+
+    if (lums.length < 50) return null;
+    lums.sort((a, b) => a - b);
+    const p25 = lums[Math.floor(lums.length * 0.25)];
+    const p75 = lums[Math.floor(lums.length * 0.75)];
+
+    // If contrast between 25th and 75th percentile is low, it's already a full-frame scan
+    if (p75 - p25 < 35) return null;
+
+    const paperThreshold = (p25 + p75) / 2;
+
+    // Scan column paper densities
+    const colPaperRatio = new Float32Array(width);
+    for (let x = 0; x < width; x += 4) {
+      let paper = 0;
+      let count = 0;
+      for (let y = 0; y < height; y += 8) {
+        const idx = (y * width + x) * 4;
+        const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        if (lum > paperThreshold) paper++;
+        count++;
+      }
+      colPaperRatio[x] = count > 0 ? paper / count : 0;
+    }
+
+    let minX = 0;
+    for (let x = 0; x < width; x += 4) {
+      if (colPaperRatio[x] > 0.35) { minX = x; break; }
+    }
+
+    let maxX = width - 1;
+    for (let x = width - 1; x >= 0; x -= 4) {
+      if (colPaperRatio[x] > 0.35) { maxX = x; break; }
+    }
+
+    // Scan row paper densities within [minX, maxX]
+    const rowPaperRatio = new Float32Array(height);
+    for (let y = 0; y < height; y += 4) {
+      let paper = 0;
+      let count = 0;
+      for (let x = minX; x <= maxX; x += 8) {
+        const idx = (y * width + x) * 4;
+        const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        if (lum > paperThreshold) paper++;
+        count++;
+      }
+      rowPaperRatio[y] = count > 0 ? paper / count : 0;
+    }
+
+    let minY = 0;
+    for (let y = 0; y < height; y += 4) {
+      if (rowPaperRatio[y] > 0.35) { minY = y; break; }
+    }
+
+    let maxY = height - 1;
+    for (let y = height - 1; y >= 0; y -= 4) {
+      if (rowPaperRatio[y] > 0.35) { maxY = y; break; }
+    }
+
+    // Add safe 2.5% padding so no printed text near edges is clipped
+    const padX = Math.round((maxX - minX) * 0.025);
+    const padY = Math.round((maxY - minY) * 0.025);
+
+    const finalMinX = Math.max(0, minX - padX);
+    const finalMaxX = Math.min(width - 1, maxX + padX);
+    const finalMinY = Math.max(0, minY - padY);
+    const finalMaxY = Math.min(height - 1, maxY + padY);
+
+    const cropW = finalMaxX - finalMinX;
+    const cropH = finalMaxY - finalMinY;
+
+    const areaRatio = (cropW * cropH) / (width * height);
+    if (areaRatio > 0.25 && areaRatio < 0.98 && cropW > 120 && cropH > 120) {
+      return { x: finalMinX, y: finalMinY, width: cropW, height: cropH };
+    }
+  } catch {
+    // Non-fatal fallback to full image
+  }
+  return null;
 }
 
 /**

@@ -1880,6 +1880,145 @@ Total: 756.00`,
   );
 }
 
+// ===== ARROW-LESS NATURAL PRICE & QTY INPUTS =====
+/**
+ * Arrow-less, natural typing price input storing integer paise.
+ * - Auto-selects on focus so clicking immediately enables replacing the number.
+ * - Eliminates browser stepper arrows (no more holding arrows).
+ * - Doesn't fight the user with .toFixed(2) mid-keystroke.
+ * - Commits clean integer paise on blur / Enter key.
+ */
+function PriceInput({
+  valuePaise,
+  onChange,
+  allowNegative = false,
+  className = 'input input-sm input-mono',
+  style = {},
+  placeholder = '0.00',
+  id,
+  name
+}) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [text, setText] = useState('');
+
+  useEffect(() => {
+    if (!isFocused) {
+      if (valuePaise === 0 || valuePaise === undefined || valuePaise === null) {
+        setText('0.00');
+      } else {
+        setText((valuePaise / 100).toFixed(2));
+      }
+    }
+  }, [valuePaise, isFocused]);
+
+  const handleFocus = (e) => {
+    setIsFocused(true);
+    e.target.select();
+  };
+
+  const handleChange = (e) => {
+    const raw = e.target.value;
+    let filtered = allowNegative
+      ? raw.replace(/(?!^)-|[^0-9.-]/g, '')
+      : raw.replace(/[^0-9.]/g, '');
+
+    const parts = filtered.split('.');
+    if (parts.length > 2) {
+      filtered = parts[0] + '.' + parts.slice(1).join('');
+    }
+    setText(filtered);
+
+    if (filtered !== '' && filtered !== '-' && filtered !== '.') {
+      const num = parseFloat(filtered);
+      if (!isNaN(num)) {
+        onChange(Math.round(num * 100));
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    let num = parseFloat(text);
+    if (isNaN(num)) num = 0;
+    if (!allowNegative && num < 0) num = 0;
+    const paise = Math.round(num * 100);
+    onChange(paise);
+    setText((paise / 100).toFixed(2));
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.target.blur();
+    }
+  };
+
+  return (
+    <input
+      id={id}
+      name={name}
+      type="text"
+      inputMode="decimal"
+      autoComplete="off"
+      className={className}
+      style={{
+        ...style,
+      }}
+      placeholder={placeholder}
+      value={isFocused ? text : (valuePaise !== undefined ? (valuePaise / 100).toFixed(2) : '0.00')}
+      onFocus={handleFocus}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
+
+/**
+ * Arrow-less, natural typing quantity input.
+ * - Auto-selects on focus so clicking immediately enables replacing the number.
+ * - No stepper arrows.
+ * - Minimum quantity 1.
+ */
+function QtyInput({ value, onChange, style = {} }) {
+  const [isFocused, setIsFocused] = useState(false);
+  const [text, setText] = useState(String(value || 1));
+
+  useEffect(() => {
+    if (!isFocused) setText(String(value || 1));
+  }, [value, isFocused]);
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      className="input input-sm input-mono"
+      style={style}
+      value={isFocused ? text : (value || 1)}
+      onFocus={(e) => {
+        setIsFocused(true);
+        e.target.select();
+      }}
+      onChange={(e) => {
+        const cleaned = e.target.value.replace(/[^0-9]/g, '');
+        setText(cleaned);
+        const parsed = parseInt(cleaned, 10);
+        if (parsed > 0) onChange(parsed);
+      }}
+      onBlur={() => {
+        setIsFocused(false);
+        const parsed = parseInt(text, 10);
+        const finalQty = parsed > 0 ? parsed : 1;
+        onChange(finalQty);
+        setText(String(finalQty));
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.target.blur();
+      }}
+    />
+  );
+}
+
 // ===== REVIEW EDITOR =====
 function ReviewEditor() {
   const { groupId } = useParams();
@@ -1997,9 +2136,9 @@ function ReviewEditor() {
   const updateItem = (idx, field, value) => {
     const updated = [...items];
     if (field === 'totalPaise' || field === 'unitPricePaise') {
-      updated[idx][field] = Math.round(parseFloat(value) * 100) || 0;
+      updated[idx][field] = typeof value === 'number' ? value : (Math.round(parseFloat(value) * 100) || 0);
     } else if (field === 'qty') {
-      updated[idx][field] = parseInt(value) || 1;
+      updated[idx][field] = typeof value === 'number' ? value : (parseInt(value, 10) || 1);
     } else {
       updated[idx][field] = value;
     }
@@ -2302,15 +2441,18 @@ function ReviewEditor() {
                           </div>
                         </td>
                         <td>
-                          <input className="input input-sm input-mono" type="number" min="1" value={item.qty}
-                            onChange={e => updateItem(idx, 'qty', e.target.value)}
-                            style={{ width: 50, textAlign: 'center' }} />
+                          <QtyInput
+                            value={item.qty}
+                            onChange={q => updateItem(idx, 'qty', q)}
+                            style={{ width: 50, textAlign: 'center' }}
+                          />
                         </td>
                         <td>
-                          <input className="input input-sm input-mono" type="number" step="0.01"
-                            value={(item.unitPricePaise / 100).toFixed(2)}
-                            onChange={e => updateItem(idx, 'unitPricePaise', e.target.value)}
-                            style={{ width: 85 }} />
+                          <PriceInput
+                            valuePaise={item.unitPricePaise}
+                            onChange={p => updateItem(idx, 'unitPricePaise', p)}
+                            style={{ width: 85, textAlign: 'right' }}
+                          />
                         </td>
                         <td>
                           <span className="input-mono" style={{ fontWeight: 600 }}>
@@ -2344,14 +2486,15 @@ function ReviewEditor() {
                       style={{ flex: 1, minWidth: 120, background: 'transparent' }} />
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ color: 'var(--ink-muted)' }}>₹</span>
-                      <input className="input input-sm input-mono" type="number" step="0.01"
-                        value={(tax.amountPaise / 100).toFixed(2)}
-                        onChange={e => {
+                      <PriceInput
+                        valuePaise={tax.amountPaise}
+                        onChange={p => {
                           const t = [...taxes];
-                          t[idx].amountPaise = Math.round(parseFloat(e.target.value || 0) * 100);
+                          t[idx].amountPaise = p;
                           setTaxes(t);
                         }}
-                        style={{ width: 85, textAlign: 'right' }} />
+                        style={{ width: 85, textAlign: 'right' }}
+                      />
                       <button type="button" className="btn btn-ghost btn-icon" style={{ fontSize: '0.75rem', padding: '2px 6px', color: '#ef4444' }}
                         title="Delete tax" onClick={() => setTaxes(taxes.filter((_, i) => i !== idx))}>
                         🗑️
@@ -2364,10 +2507,11 @@ function ReviewEditor() {
                     <span style={{ color: 'var(--ink-secondary)' }}>Service Charge</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ color: 'var(--ink-muted)' }}>₹</span>
-                      <input className="input input-sm input-mono" type="number" step="0.01"
-                        value={(serviceCharge / 100).toFixed(2)}
-                        onChange={e => setServiceCharge(Math.round(parseFloat(e.target.value || 0) * 100))}
-                        style={{ width: 85, textAlign: 'right' }} />
+                      <PriceInput
+                        valuePaise={serviceCharge}
+                        onChange={setServiceCharge}
+                        style={{ width: 85, textAlign: 'right' }}
+                      />
                     </div>
                   </div>
                 )}
@@ -2376,10 +2520,12 @@ function ReviewEditor() {
                     <span style={{ color: 'var(--ink-secondary)' }}>Adjustments / Round Off</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ color: 'var(--ink-muted)' }}>₹</span>
-                      <input className="input input-sm input-mono" type="number" step="0.01"
-                        value={(roundoff / 100).toFixed(2)}
-                        onChange={e => setRoundoff(Math.round(parseFloat(e.target.value || 0) * 100))}
-                        style={{ width: 85, textAlign: 'right' }} />
+                      <PriceInput
+                        valuePaise={roundoff}
+                        allowNegative={true}
+                        onChange={setRoundoff}
+                        style={{ width: 85, textAlign: 'right' }}
+                      />
                     </div>
                   </div>
                 )}
@@ -2388,10 +2534,11 @@ function ReviewEditor() {
                     <span style={{ color: '#10b981' }}>Discount</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <span style={{ color: '#10b981' }}>-₹</span>
-                      <input className="input input-sm input-mono" type="number" step="0.01"
-                        value={(discount / 100).toFixed(2)}
-                        onChange={e => setDiscount(Math.round(parseFloat(e.target.value || 0) * 100))}
-                        style={{ width: 85, textAlign: 'right', color: '#10b981' }} />
+                      <PriceInput
+                        valuePaise={discount}
+                        onChange={setDiscount}
+                        style={{ width: 85, textAlign: 'right', color: '#10b981' }}
+                      />
                     </div>
                   </div>
                 )}
@@ -2399,10 +2546,11 @@ function ReviewEditor() {
                   <span style={{ color: 'var(--ink-primary)' }}>Total</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span>₹</span>
-                    <input className="input input-sm input-mono" type="number" step="0.01"
-                      value={(total / 100).toFixed(2)}
-                      onChange={e => setTotal(Math.round(parseFloat(e.target.value) * 100) || 0)}
-                      style={{ width: 100, fontWeight: 700 }} />
+                    <PriceInput
+                      valuePaise={total}
+                      onChange={setTotal}
+                      style={{ width: 100, fontWeight: 700, textAlign: 'right' }}
+                    />
                   </div>
                 </div>
               </div>
@@ -2555,9 +2703,13 @@ function ReviewEditor() {
                 <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <div className="avatar avatar-sm" style={{ background: m.color || getMemberColor(i) }}>{getInitials(m.name)}</div>
                   <span style={{ flex: 1, fontWeight: 500 }}>{m.name}</span>
-                  <input className="input input-sm input-mono" type="number" step="0.1" min="0" max="100"
-                    value={customSplits[m.id] || ''} placeholder="0"
-                    onChange={e => setCustomSplits({ ...customSplits, [m.id]: parseFloat(e.target.value) || 0 })}
+                  <input className="input input-sm input-mono" type="text" inputMode="decimal"
+                    value={customSplits[m.id] !== undefined ? customSplits[m.id] : ''} placeholder="0"
+                    onFocus={e => e.target.select()}
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^0-9.]/g, '');
+                      setCustomSplits({ ...customSplits, [m.id]: parseFloat(val) || 0 });
+                    }}
                     style={{ width: 80, textAlign: 'right' }} />
                   <span style={{ color: 'var(--text-muted)' }}>%</span>
                 </div>
@@ -2580,9 +2732,13 @@ function ReviewEditor() {
                 <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <div className="avatar avatar-sm" style={{ background: m.color || getMemberColor(i) }}>{getInitials(m.name)}</div>
                   <span style={{ flex: 1, fontWeight: 500 }}>{m.name}</span>
-                  <input className="input input-sm input-mono" type="number" min="0" step="1"
-                    value={customSplits[m.id] || ''} placeholder="1"
-                    onChange={e => setCustomSplits({ ...customSplits, [m.id]: parseInt(e.target.value) || 0 })}
+                  <input className="input input-sm input-mono" type="text" inputMode="numeric"
+                    value={customSplits[m.id] !== undefined ? customSplits[m.id] : ''} placeholder="1"
+                    onFocus={e => e.target.select()}
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^0-9]/g, '');
+                      setCustomSplits({ ...customSplits, [m.id]: parseInt(val, 10) || 0 });
+                    }}
                     style={{ width: 60, textAlign: 'center' }} />
                   <span style={{ color: 'var(--text-muted)' }}>shares</span>
                 </div>
@@ -2839,8 +2995,15 @@ function ManualExpense() {
           </div>
           <div>
             <label className="label">Amount (₹)</label>
-            <input className="input input-mono" type="number" step="0.01" placeholder="0.00"
-              value={amount} onChange={e => setAmount(e.target.value)} />
+            <input className="input input-mono" type="text" inputMode="decimal" placeholder="0.00"
+              value={amount}
+              onFocus={e => e.target.select()}
+              onChange={e => {
+                const val = e.target.value.replace(/[^0-9.]/g, '');
+                const parts = val.split('.');
+                const clean = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : val;
+                setAmount(clean);
+              }} />
           </div>
           <div>
             <label className="label">Paid by</label>

@@ -1409,6 +1409,17 @@ body {
 .input-mono {
   font-family: var(--font-mono);
 }
+
+/* Remove annoying browser stepper arrows from number inputs */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
 .label {
   display: block;
   font-size: 0.82rem;
