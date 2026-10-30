@@ -112,51 +112,52 @@ export function useExpenses(groupId) {
 }
 
 // ===== OCR HOOK =====
+let cachedWorker = null;
+
 export function useOCR() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const workerRef = useRef(null);
 
   const recognize = useCallback(async (imageSource) => {
     setIsProcessing(true);
-    setProgress(0);
-    setStatus('Initializing OCR...');
+    setProgress(5);
+    setStatus('Initializing OCR engine...');
 
     try {
-      // Dynamic import Tesseract.js
       const Tesseract = await import('tesseract.js');
-      
-      setStatus('Loading language data...');
-      setProgress(10);
+      const langPath = typeof window !== 'undefined' ? window.location.origin : '.';
 
-      const worker = await Tesseract.createWorker('eng', 1, {
-        logger: (m) => {
-          if (m.status === 'recognizing text') {
-            setProgress(30 + Math.round(m.progress * 60));
-            setStatus('Recognizing text...');
-          } else if (m.status === 'loading language traineddata') {
-            setProgress(15 + Math.round(m.progress * 15));
-            setStatus('Loading language data...');
-          }
-        },
-      });
+      if (!cachedWorker) {
+        setStatus('Loading OCR language model...');
+        setProgress(15);
 
-      await worker.setParameters({
-        preserve_interword_spaces: '1',
-        tessedit_pageseg_mode: '6', // PSM 6: Uniform block of text (Preserves complete left-to-right receipt rows without dropping prices)
-      });
+        cachedWorker = await Tesseract.createWorker('eng', 1, {
+          langPath,
+          cacheMethod: 'readOnly',
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              setProgress(30 + Math.round(m.progress * 60));
+              setStatus('Recognizing text (' + Math.round(m.progress * 100) + '%)...');
+            } else if (m.status === 'loading language traineddata') {
+              setProgress(15 + Math.round(m.progress * 15));
+              setStatus('Loading language model...');
+            }
+          },
+        });
 
-      workerRef.current = worker;
-      setStatus('Processing receipt...');
+        await cachedWorker.setParameters({
+          preserve_interword_spaces: '1',
+          tessedit_pageseg_mode: '6',
+        });
+      }
+
+      setStatus('Processing receipt text & layout...');
       setProgress(30);
 
-      const result = await worker.recognize(imageSource, {}, { blocks: true });
+      const result = await cachedWorker.recognize(imageSource, {}, { blocks: true });
       setProgress(95);
-      setStatus('Parsing results...');
-
-      await worker.terminate();
-      workerRef.current = null;
+      setStatus('Structuring line items...');
 
       setProgress(100);
       setStatus('Done!');
@@ -165,6 +166,10 @@ export function useOCR() {
       return result.data;
     } catch (err) {
       console.error('OCR error:', err);
+      if (cachedWorker) {
+        try { await cachedWorker.terminate(); } catch { /* ignore */ }
+        cachedWorker = null;
+      }
       setStatus('Error: ' + err.message);
       setIsProcessing(false);
       throw err;
@@ -172,13 +177,16 @@ export function useOCR() {
   }, []);
 
   const cancel = useCallback(async () => {
-    if (workerRef.current) {
-      await workerRef.current.terminate();
-      workerRef.current = null;
+    if (cachedWorker) {
+      try {
+        await cachedWorker.terminate();
+      } catch {
+        // ignore cleanup errors
+      }
+      cachedWorker = null;
     }
     setIsProcessing(false);
-    setProgress(0);
-    setStatus('');
+    setStatus('Cancelled');
   }, []);
 
   return { recognize, cancel, progress, status, isProcessing };

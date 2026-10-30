@@ -2155,9 +2155,33 @@ function ReviewEditor() {
   };
 
   useEffect(() => {
-    dbOps.getGroup(groupId).then(g => {
-      if (g) { setGroup(g); if (g.members.length > 0) setPayer(g.members[0].id); }
-    });
+    const resolveGroup = async () => {
+      let g = await dbOps.getGroup(groupId);
+      if (!g) {
+        const all = await dbOps.getAllGroups();
+        if (all.length > 0) {
+          g = all.find(x => x.id === groupId) || all[0];
+        } else {
+          g = {
+            id: groupId || 'jugadu-cafe',
+            name: 'Jugadu Cafe',
+            members: [
+              { id: 'm1', name: 'You' },
+              { id: 'm2', name: 'Jerry' },
+              { id: 'm3', name: 'Danny' },
+              { id: 'm4', name: 'Richard' },
+            ],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          await dbOps.saveGroup(g);
+        }
+      }
+      setGroup(g);
+      if (g.members && g.members.length > 0) setPayer(g.members[0].id);
+    };
+
+    resolveGroup().catch(console.error);
 
     // Load parsed data from sessionStorage
     const parsedStr = sessionStorage.getItem('parsedReceipt');
@@ -3183,13 +3207,34 @@ function ManualExpense() {
   const { addExpense } = useExpenses(groupId);
 
   useEffect(() => {
-    dbOps.getGroup(groupId).then(g => {
-      if (g) {
-        setGroup(g);
-        setPayer(g.members[0]?.id || '');
-        setParticipants(g.members.map(m => m.id));
+    const resolveGroup = async () => {
+      let g = await dbOps.getGroup(groupId);
+      if (!g) {
+        const all = await dbOps.getAllGroups();
+        if (all.length > 0) {
+          g = all.find(x => x.id === groupId) || all[0];
+        } else {
+          g = {
+            id: groupId || 'jugadu-cafe',
+            name: 'Jugadu Cafe',
+            members: [
+              { id: 'm1', name: 'You' },
+              { id: 'm2', name: 'Jerry' },
+              { id: 'm3', name: 'Danny' },
+              { id: 'm4', name: 'Richard' },
+            ],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          await dbOps.saveGroup(g);
+        }
       }
-    });
+      setGroup(g);
+      setPayer(g.members[0]?.id || '');
+      setParticipants(g.members.map(m => m.id));
+    };
+
+    resolveGroup().catch(console.error);
   }, [groupId]);
 
   const handleSave = async () => {
