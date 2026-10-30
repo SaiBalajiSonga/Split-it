@@ -1289,6 +1289,9 @@ function ReviewEditor() {
   const [splitMode, setSplitMode] = useState('itemized');
   const [customSplits, setCustomSplits] = useState({});
   const [showRawOCR, setShowRawOCR] = useState(false);
+  const [receiptZoom, setReceiptZoom] = useState(1.0);
+  const [showImageLightbox, setShowImageLightbox] = useState(false);
+  const [mobileTab, setMobileTab] = useState('items'); // 'receipt' | 'items'
   const { addExpense } = useExpenses(groupId);
 
   const handleReparseOCR = () => {
@@ -1497,24 +1500,104 @@ function ReviewEditor() {
       {/* STEP 1: Review */}
       {step === 'review' && (
         <div className="animate-fadeIn">
+          {/* Mobile view toggle */}
+          {receiptImage && (
+            <div className="review-mobile-nav">
+              <button
+                type="button"
+                className={`btn btn-sm ${mobileTab === 'receipt' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setMobileTab('receipt')}
+              >
+                🧾 View Receipt
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${mobileTab === 'items' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setMobileTab('items')}
+              >
+                📝 Edit Items ({items.length})
+              </button>
+            </div>
+          )}
+
           <div className="review-layout">
             {/* Receipt image */}
             {receiptImage && (
-              <div className="review-image">
-                <img src={receiptImage} alt="Receipt" />
-                <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'center' }}>
-                  <button className="btn btn-sm btn-ghost" onClick={() => navigate(`/group/${groupId}/scan`)}>
-                    📸 Re-scan
-                  </button>
-                  <button className="btn btn-sm btn-secondary" onClick={handleReparseOCR}>
-                    ⚡ Re-parse Text
-                  </button>
+              <div className={`review-image-card ${mobileTab === 'items' ? 'review-col-hidden-mobile' : ''}`}>
+                <div className="review-image-header">
+                  <div className="review-image-title">
+                    <span>🧾 Receipt Preview</span>
+                  </div>
+                  <div className="review-image-controls">
+                    <button
+                      type="button"
+                      className="review-control-btn"
+                      onClick={() => setReceiptZoom(z => Math.max(0.6, +(z - 0.2).toFixed(1)))}
+                      title="Zoom Out"
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      className="review-control-btn"
+                      onClick={() => setReceiptZoom(1.0)}
+                      title="Reset Zoom to 100%"
+                      style={{ minWidth: 46 }}
+                    >
+                      {Math.round(receiptZoom * 100)}%
+                    </button>
+                    <button
+                      type="button"
+                      className="review-control-btn"
+                      onClick={() => setReceiptZoom(z => Math.min(2.5, +(z + 0.2).toFixed(1)))}
+                      title="Zoom In"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="review-control-btn"
+                      onClick={() => setShowImageLightbox(true)}
+                      title="Expand Fullscreen Modal"
+                      style={{ marginLeft: 4 }}
+                    >
+                      ⛶
+                    </button>
+                  </div>
+                </div>
+
+                <div className="review-image-viewport">
+                  <img
+                    src={receiptImage}
+                    alt="Receipt"
+                    className="review-receipt-img"
+                    style={{
+                      width: `${Math.round(receiptZoom * 100)}%`,
+                      maxWidth: receiptZoom === 1.0 ? '100%' : 'none',
+                    }}
+                    onClick={() => setShowImageLightbox(true)}
+                    title="Click to expand fullscreen"
+                  />
+                </div>
+
+                <div className="review-image-footer">
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-xs btn-ghost" onClick={() => navigate(`/group/${groupId}/scan`)}>
+                      📸 Re-scan
+                    </button>
+                    <button className="btn btn-xs btn-secondary" onClick={handleReparseOCR}>
+                      ⚡ Re-parse Text
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Scroll to view full bill
+                  </span>
                 </div>
               </div>
             )}
             
             {/* Parsed items table */}
-            <div>
+            <div className={mobileTab === 'receipt' ? 'review-col-hidden-mobile' : ''}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Parsed Items</h3>
@@ -1698,6 +1781,69 @@ function ReviewEditor() {
                   Next: Assign Items →
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Receipt Image Lightbox Modal */}
+      {showImageLightbox && receiptImage && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowImageLightbox(false)}
+          style={{
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(2, 2, 8, 0.9)',
+            backdropFilter: 'blur(10px)',
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: '92vw',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--border-glass)',
+              background: 'var(--bg-card)',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px 18px',
+                borderBottom: '1px solid var(--border-glass)',
+                background: 'rgba(15, 15, 30, 0.95)',
+              }}
+            >
+              <span style={{ fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                🧾 Full Receipt Image (High Resolution)
+              </span>
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => setShowImageLightbox(false)}
+                style={{ borderRadius: '50%', width: 32, height: 32, padding: 0 }}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ overflow: 'auto', padding: 20, display: 'flex', justifyContent: 'center', background: 'rgba(5, 5, 12, 0.7)' }}>
+              <img
+                src={receiptImage}
+                alt="Receipt Fullscreen"
+                style={{ maxWidth: '100%', height: 'auto', display: 'block', borderRadius: 'var(--radius-md)' }}
+              />
             </div>
           </div>
         </div>
