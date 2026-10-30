@@ -30,17 +30,15 @@ export async function preprocessImage(source) {
   canvas.width = width;
   canvas.height = height;
   
+  // Draw scaled image cleanly with smooth anti-aliased rendering and gentle contrast boost for thermal receipts
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  if (ctx.filter !== undefined) {
+    ctx.filter = 'contrast(1.15) brightness(1.02)';
+  }
   ctx.drawImage(img, 0, 0, width, height);
-  
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  
-  // Step 1: Grayscale + Local Adaptive Thresholding (Bradley-Roth)
-  // Perfectly handles receipts on dark tables, uneven shadows, and faint thermal print
-  applyAdaptiveThreshold(data, width, height, 35, 10);
 
-  ctx.putImageData(imageData, 0, 0);
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL('image/jpeg', 0.92);
 }
 
 /**

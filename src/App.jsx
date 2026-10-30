@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { HashRouter, Routes, Route, useNavigate, useParams, Link } from 'react-router-dom';
+import { HashRouter, Routes, Route, useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { ToastProvider, useToast, useGroups, useExpenses, useOCR, useCamera } from './hooks/useAppHooks';
-import { parseReceipt, validateTotal } from './logic/receiptParser';
+import { parseReceipt, validateTotal, cleanItemName } from './logic/receiptParser';
 import { calculateItemizedSplit, calculateEqualSplit, calculatePercentageSplit, calculateSharesSplit, computeNetBalances } from './logic/splitEngine';
 import { simplifyDebts } from './logic/debtSimplifier';
 import { formatCurrency, formatDate, formatRelativeTime, getInitials, getMemberColor, CATEGORIES, generateUPILink } from './utils/formatters';
@@ -349,11 +349,14 @@ function GroupView() {
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setShowFab(false)} />
           <div className="fab-menu">
+            <button className="fab-menu-item" onClick={() => { setShowFab(false); navigate(`/group/${groupId}/scan?tab=text`); }}>
+              📋 Paste Bill Text (No Scan)
+            </button>
             <button className="fab-menu-item" onClick={() => { setShowFab(false); navigate(`/group/${groupId}/scan`); }}>
-              📸 Scan Receipt
+              📸 Scan Photo / Upload
             </button>
             <button className="fab-menu-item" onClick={() => { setShowFab(false); navigate(`/group/${groupId}/manual`); }}>
-              ✏️ Manual Entry
+              ✏️ Manual Item Entry
             </button>
           </div>
         </>
@@ -871,8 +874,11 @@ function StatCard({ label, value }) {
 // ===== RECEIPT SCANNER =====
 function ReceiptScanner() {
   const { groupId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const [scannerTab, setScannerTab] = useState(searchParams.get('tab') === 'text' ? 'text' : 'photo'); // 'photo' | 'text'
+  const [pastedText, setPastedText] = useState('');
   const [imageData, setImageData] = useState(null);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef(null);
@@ -880,6 +886,60 @@ function ReceiptScanner() {
   const [showCamera, setShowCamera] = useState(false);
   const { recognize, progress, status, isProcessing } = useOCR();
   const [rotation, setRotation] = useState(0);
+
+  const sampleTexts = {
+    ab: `Absolute Barbecues
+AB's-POWAI
+Mumbai, Maharashtra - 400072
+
+Masala Margarita
+1 @ 169/ea 169.00
+Water Btl
+3 @ 20/ea 60.00
+TT Dinner sun nvg
+4 @ 999.75/ea 3,999.00
+
+Sub Total 4,228.00
+CGST 2.5 2.5% on 4,228.00 105.70
+SGST 2.5 2.5% on 4,228.00 105.70
+
+Bill Total 4,439.40`,
+    canteen: `NIGHT CANTEEN & CAFE
+Hostel Wing 4, Campus Grounds
+Order #4082
+
+Paneer Butter Masala 180.00
+3 Butter Naan 120.00
+Dal Makhani 150.00
+Jeera Rice 110.00
+2 Cold Coffee 160.00
+
+Sub Total: 720.00
+CGST 2.5%: 18.00
+SGST 2.5%: 18.00
+Total: 756.00`,
+  };
+
+  const handlePastedTextProcess = () => {
+    if (!pastedText.trim()) {
+      toast('Please paste or type your receipt text first', 'warning');
+      return;
+    }
+    try {
+      const parsed = parseReceipt({ text: pastedText });
+      if (!parsed.items || parsed.items.length === 0) {
+        toast('No items detected in text. Make sure items have prices (e.g. Masala Coke 200.00)', 'warning');
+        return;
+      }
+      sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
+      sessionStorage.setItem('ocrResult', JSON.stringify({ text: pastedText }));
+      sessionStorage.removeItem('receiptImage');
+      toast(`Successfully parsed ${parsed.items.length} items from text!`, 'success');
+      navigate(`/group/${groupId}/review`);
+    } catch (err) {
+      toast('Failed to parse text: ' + err.message, 'error');
+    }
+  };
 
   const handleFile = async (file) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -917,17 +977,17 @@ function ReceiptScanner() {
   const handleProcess = async () => {
     if (!imageData) return;
     try {
-      // Preprocess image
-      const processed = await preprocessImage(imageData);
-      const ocrResult = await recognize(processed);
+      // Normalize image scale for fast OCR without destructive binarization
+      const normalized = await preprocessImage(imageData);
+      const ocrResult = await recognize(normalized || imageData);
       
       // Parse the OCR result
       const parsed = parseReceipt(ocrResult);
       
-      // Store in sessionStorage safely (lightweight ocrResult to avoid storage quota limit)
+      // Store in sessionStorage safely (preserve clean original imageData for preview)
       try {
         sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
-        sessionStorage.setItem('receiptImage', processed || imageData);
+        sessionStorage.setItem('receiptImage', imageData);
         sessionStorage.setItem('ocrResult', JSON.stringify({ text: ocrResult?.text || '' }));
       } catch {
         // Fallback if image data exceeds storage quota
@@ -1154,116 +1214,185 @@ function ReceiptScanner() {
       <div className="page-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Link to={`/group/${groupId}`} className="btn btn-ghost btn-icon">←</Link>
-          <h1 className="page-title">Scan Receipt</h1>
+          <h1 className="page-title">Add Receipt / Bill</h1>
         </div>
       </div>
 
-      {!imageData && !showCamera && (
-        <div className="animate-fadeIn">
-          {/* Dropzone */}
-          <div className={`scanner-dropzone ${dragging ? 'dragging' : ''}`}
-            onClick={() => fileRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}>
-            <span className="scanner-dropzone-icon">📸</span>
-            <div className="scanner-dropzone-text">Drop a receipt image here</div>
-            <div className="scanner-dropzone-hint">or click to browse (JPG, PNG)</div>
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={e => handleFile(e.target.files[0])} />
+      {/* Mode Switcher: Photo Scan vs Paste Bill Text */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <button
+          type="button"
+          className={`btn btn-sm ${scannerTab === 'photo' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setScannerTab('photo')}
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+        >
+          📸 Photo / Upload Scan
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${scannerTab === 'text' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setScannerTab('text')}
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+        >
+          📋 Paste Bill Text (No Scan)
+        </button>
+      </div>
+
+      {/* MODE 2: Paste Raw Bill Text (Skip OCR entirely) */}
+      {scannerTab === 'text' && (
+        <div className="animate-fadeIn card" style={{ padding: 20 }}>
+          <div style={{ marginBottom: 14 }}>
+            <label className="label" style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+              Paste Receipt Text directly
+            </label>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              No image scanning required! Paste raw text from SMS, WhatsApp, digital receipts, or delivery apps.
+            </p>
           </div>
 
-          {/* Camera button */}
-          <div style={{ textAlign: 'center', marginTop: 16 }}>
-            <button className="btn btn-secondary" onClick={openCamera}>
-              📷 Use Camera
+          <textarea
+            className="input"
+            rows={10}
+            value={pastedText}
+            onChange={e => setPastedText(e.target.value)}
+            placeholder={`Example:\nMasala Margarita\n1 @ 169/ea 169.00\nWater Btl\n3 @ 20/ea 60.00\nTT Dinner sun nvg\n4 @ 999.75/ea 3,999.00\nSub Total: 4,228.00\nCGST 2.5%: 105.70\nSGST 2.5%: 105.70\nBill Total: 4,439.40`}
+            style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.85rem', lineHeight: 1.5, resize: 'vertical', background: 'rgba(5, 5, 12, 0.6)' }}
+          />
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Try Sample:</span>
+              <button type="button" className="btn btn-xs btn-ghost" onClick={() => setPastedText(sampleTexts.ab)}>
+                🍖 Absolute BBQ
+              </button>
+              <button type="button" className="btn btn-xs btn-ghost" onClick={() => setPastedText(sampleTexts.canteen)}>
+                🍛 Canteen
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handlePastedTextProcess}
+              disabled={!pastedText.trim()}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              ⚡ Parse Text & Review →
             </button>
-            {camError && (
-              <div style={{ marginTop: 12, padding: 12, background: 'rgba(245, 158, 11, 0.1)', borderRadius: 'var(--radius-md)', color: 'var(--accent-amber)', fontSize: '0.85rem' }}>
-                ⚠️ {camError}
+          </div>
+        </div>
+      )}
+
+      {/* MODE 1: Photo / Camera Scan */}
+      {scannerTab === 'photo' && (
+        <>
+          {!imageData && !showCamera && (
+            <div className="animate-fadeIn">
+              {/* Dropzone */}
+              <div className={`scanner-dropzone ${dragging ? 'dragging' : ''}`}
+                onClick={() => fileRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}>
+                <span className="scanner-dropzone-icon">📸</span>
+                <div className="scanner-dropzone-text">Drop a receipt image here</div>
+                <div className="scanner-dropzone-hint">or click to browse (JPG, PNG)</div>
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => handleFile(e.target.files[0])} />
               </div>
-            )}
-          </div>
 
-          {/* Sample receipts picker */}
-          <div style={{ marginTop: 24, padding: 18, background: 'var(--bg-glass)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-glass)' }}>
-            <div style={{ marginBottom: 12, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              ✨ Don't have a receipt? Try our realistic sample bills:
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => loadSampleReceipt('canteen')}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                🍛 Canteen Bill (₹1,320)
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => loadSampleReceipt('ccd')}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                ☕ CCD Cafe (₹803)
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => handleInstantDemo('canteen')}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--gradient-cool)' }}>
-                ⚡ Instant Demo (Skip OCR)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              {/* Camera button */}
+              <div style={{ textAlign: 'center', marginTop: 16 }}>
+                <button className="btn btn-secondary" onClick={openCamera}>
+                  📷 Use Camera
+                </button>
+                {camError && (
+                  <div style={{ marginTop: 12, padding: 12, background: 'rgba(245, 158, 11, 0.1)', borderRadius: 'var(--radius-md)', color: 'var(--accent-amber)', fontSize: '0.85rem' }}>
+                    ⚠️ {camError}
+                  </div>
+                )}
+              </div>
 
-      {/* Camera view */}
-      {showCamera && (
-        <div className="animate-fadeIn">
-          <div className="scanner-preview">
-            <video
-              ref={el => {
-                videoRef.current = el;
-                if (el && stream && el.srcObject !== stream) {
-                  el.srcObject = stream;
-                }
-              }}
-              autoPlay
-              playsInline
-              style={{ width: '100%', display: 'block' }}
-            />
-            <div className="scanner-preview-actions">
-              <button className="btn btn-ghost" onClick={() => { stopCamera(); setShowCamera(false); }}>Cancel</button>
-              <button className="btn btn-primary btn-lg" onClick={handleCameraCapture}>📸 Capture</button>
+              {/* Sample receipts picker */}
+              <div style={{ marginTop: 24, padding: 18, background: 'var(--bg-glass)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-glass)' }}>
+                <div style={{ marginBottom: 12, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                  ✨ Don't have a receipt? Try our realistic sample bills:
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => loadSampleReceipt('canteen')}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    🍛 Canteen Bill (₹1,320)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => loadSampleReceipt('ccd')}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    ☕ CCD Cafe (₹803)
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleInstantDemo('canteen')}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--gradient-cool)' }}>
+                    ⚡ Instant Demo (Skip OCR)
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Image preview */}
-      {imageData && !isProcessing && (
-        <div className="animate-fadeIn">
-          <div className="scanner-preview">
-            <img src={imageData} alt="Receipt preview" />
-            <div className="scanner-preview-actions">
-              <button className="btn btn-ghost" onClick={() => { setImageData(null); setRotation(0); }}>↩ Retake</button>
-              <button className="btn btn-secondary" onClick={handleRotate}>🔄 Rotate</button>
-              <button className="btn btn-primary" onClick={handleProcess}>⚡ Process</button>
+          {/* Camera view */}
+          {showCamera && (
+            <div className="animate-fadeIn">
+              <div className="scanner-preview">
+                <video
+                  ref={el => {
+                    videoRef.current = el;
+                    if (el && stream && el.srcObject !== stream) {
+                      el.srcObject = stream;
+                    }
+                  }}
+                  autoPlay
+                  playsInline
+                  style={{ width: '100%', display: 'block' }}
+                />
+                <div className="scanner-preview-actions">
+                  <button className="btn btn-ghost" onClick={() => { stopCamera(); setShowCamera(false); }}>Cancel</button>
+                  <button className="btn btn-primary btn-lg" onClick={handleCameraCapture}>📸 Capture</button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Processing */}
-      {isProcessing && (
-        <div className="animate-fadeIn" style={{ textAlign: 'center', padding: 40 }}>
-          <div className="spinner spinner-lg" style={{ margin: '0 auto 20px' }} />
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>{status}</div>
-          <div className="progress-bar" style={{ maxWidth: 400, margin: '0 auto' }}>
-            <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8 }}>{progress}%</div>
-        </div>
+          {/* Image preview */}
+          {imageData && !isProcessing && (
+            <div className="animate-fadeIn">
+              <div className="scanner-preview">
+                <img src={imageData} alt="Receipt preview" />
+                <div className="scanner-preview-actions">
+                  <button className="btn btn-ghost" onClick={() => { setImageData(null); setRotation(0); }}>↩ Retake</button>
+                  <button className="btn btn-secondary" onClick={handleRotate}>🔄 Rotate</button>
+                  <button className="btn btn-primary" onClick={handleProcess}>⚡ Process</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Processing */}
+          {isProcessing && (
+            <div className="animate-fadeIn" style={{ textAlign: 'center', padding: 40 }}>
+              <div className="spinner spinner-lg" style={{ margin: '0 auto 20px' }} />
+              <div style={{ fontWeight: 600, marginBottom: 12 }}>{status}</div>
+              <div className="progress-bar" style={{ maxWidth: 400, margin: '0 auto' }}>
+                <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8 }}>{progress}%</div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -1339,7 +1468,8 @@ function ReviewEditor() {
           const rawOcr = JSON.parse(ocrStr);
           const reParsed = parseReceipt(rawOcr);
           const hasBogusHeader = loadedItems.some(i => /table|stl/i.test(i.name));
-          if (reParsed.items && (reParsed.items.length > loadedItems.length || hasBogusHeader)) {
+          const hasArtifacts = loadedItems.some(i => /^[^a-zA-Z0-9]/.test(i.name) || /^\d+["'`]/.test(i.name));
+          if (reParsed.items && (reParsed.items.length > loadedItems.length || hasBogusHeader || hasArtifacts)) {
             loadedItems = reParsed.items;
             if (reParsed.taxes && reParsed.taxes.length > 0) parsed.taxes = reParsed.taxes;
             if (reParsed.serviceCharge !== undefined) parsed.serviceCharge = reParsed.serviceCharge;
@@ -1349,6 +1479,12 @@ function ReviewEditor() {
           }
         } catch { /* ignore fallback error */ }
       }
+
+      // Ensure all loaded item names are cleanly sanitized
+      loadedItems = loadedItems.map(item => ({
+        ...item,
+        name: cleanItemName(item.name)
+      }));
 
       setItems(loadedItems);
       setTaxes(parsed.taxes || []);

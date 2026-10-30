@@ -14,6 +14,7 @@
  */
 
 import { generateId } from '../db/database.js';
+import { classifyItemFast } from './categorizer.js';
 
 // ===== REGEX PATTERNS =====
 
@@ -48,11 +49,17 @@ const DISCOUNT_KEYWORDS = /\b(discount|disc\.?|off|savings|offer|promo|coupon)\b
 // Round off & adjustments
 const ROUNDOFF_KEYWORDS = /\b(round\s*off|rounding|adj\.?|adjustments?)\b/i;
 
-// Table header keywords to skip
-const TABLE_HEADER_REGEX = /^(?:qty|quantity|s\.?no|#)?\s*(?:item|items|description|desc|particulars)\s*(?:qty|quantity)?\s*(?:rate|price|unit\s*price)?\s*(?:amount|total|net|val)?$/i;
+// Table header keywords to skip (matches traditional tabular headers like "ITEM QTY RATE AMOUNT")
+const TABLE_HEADER_REGEX = /(?:^(?:qty|quantity|s\.?no|#)?\s*(?:item|items|description|desc|particulars)\s*(?:qty|quantity)?\s*(?:rate|price|unit\s*price)?\s*(?:amount|total|net|val)?$|\b(?:item|items|description|desc|particulars)\b.*\b(?:qty|quantity|rate|price|amount|total|val)\b)/i;
 
-// Universal Noise Patterns: addresses, postal pincodes, store metadata, phone numbers
-const NOISE_KEYWORDS = /\b(pvt|ltd|limited|corporate|park|road|street|marg|vihar|nagar|floor|complex|bldg|building|tower|mumbai|delhi|bangalore|bengaluru|hyderabad|chennai|pune|kolkata|ahmedabad|maharashtra|karnataka|gujarat|india|pincode|pin\s*code|pin\s*-\s*\d|[1-9]\d{5}\b|draft\b|invoice\b|bill\s*n[ou]|order\b|token\b|covers?\b|shift\b|pax\b|cashier\b|server\b|waiter\b|captain\b|guest\b|station\b|terminal\b|table\b|foodandbeverages|f\s*&\s*b|gstin|fssai|tin\s*n[ou]|cin\b|pan\b|s\.?t\.?\s*n[ou]|vat\s*no|vat\s*reg|address|phone|tel|mob|fax|email|thank|welcome|visit|www\.|\.com|\.in|duplicate|original|reprint|e\s*&\s*o\.?e|customer\s*copy|have\s*a\s*nice|come\s*again|feedback|rate\s*us|scan\s*to|upi|paytm|gpay)\b/i;
+// Universal Noise Patterns: addresses, postal pincodes, store metadata, phone numbers, POS terminals, payment tenders
+const NOISE_KEYWORDS = /\b(pvt|ltd|limited|corporate|park|road|street|marg|vihar|nagar|floor|complex|bldg|building|tower|mall|plaza|avenue|lane|highway|sector|phase|block|opp\.?|near\b|mumbai|delhi|bangalore|bengaluru|hyderabad|chennai|pune|kolkata|ahmedabad|maharashtra|karnataka|gujarat|india|pincode|pin\s*code|pin\s*-\s*\d|[1-9]\d{5}\b|draft\b|invoice\b|bill\s*n[ou]|order\b|order\s*type|token\b|covers?\b|shift\b|pax\b|cashier\b|server\b|waiter\b|captain\b|steward\b|host\b|hostess\b|guest\b|counter\b|outlet\b|branch\b|station\b|terminal\b|table\b|foodandbeverages|f\s*&\s*b|gstin|fssai|tin\s*n[ou]|cin\b|pan\b|s\.?t\.?\s*n[ou]|vat\s*no|vat\s*reg|hsn\b|sac\b|address|phone|tel|mob|fax|email|thank|welcome|visit|www\.|\.com|\.in|duplicate|original|reprint|e\s*&\s*o\.?e|customer\s*copy|merchant\s*copy|have\s*a\s*nice|come\s*again|feedback|rate\s*us|scan\s*to|upi|paytm|gpay|phonepe|visa\b|mastercard\b|amex\b|rupay\b|card\s*ending|chip\s*read|swipe|auth\s*code|appr\s*code|rrn\b|aid\b|mid\b|tid\b|batch\b|trace\b|txn\b|kpt\b|kot\b|dine\s*in|take\s*away|parcel|delivery|wi-?fi\b|password\b|goods\s*once\s*sold|subject\s*to|jurisdiction)\b/i;
+
+// Matches random alphanumeric codes, hashes, serial numbers, barcodes (10-18 digits), or multi-part reference codes
+const RANDOM_CODE_REGEX = /\b(?:(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{6,}|[A-Z0-9]{2,}[-#/][A-Z0-9]{2,}[-#/][A-Z0-9]{2,}|\d{10,18})\b/i;
+
+// Matches timestamps and dates (e.g. 11:08 PM, 15:49, 21/05/2016, Oct 04 2026)
+const DATE_TIME_REGEX = /\b(?:\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{2,4})\b/i;
 
 // Lines that are just numbers/dates
 const JUST_NUMBERS = /^\s*[\d\s/\-.:,]+\s*$/;
@@ -84,6 +91,11 @@ export function parseReceipt(ocrResult) {
       .filter(l => l.text.length > 0);
   }
 
+  // Spatial Line Ordering: If lines have vertical coordinates (bbox.y0), sort top-to-bottom
+  if (lines.length > 0 && lines[0]?.bbox?.y0 !== undefined) {
+    lines.sort((a, b) => (a.bbox?.y0 || 0) - (b.bbox?.y0 || 0));
+  }
+
   const items = [];
   const taxes = [];
   let subtotal = null;
@@ -93,25 +105,54 @@ export function parseReceipt(ocrResult) {
   let roundoff = 0;
   const usedLines = new Set();
 
+  // ===== 1. ZONE SEGMENTATION =====
+  // Professional Receipt Architecture isolates the receipt into 3 zones:
+  // Zone 1: Header (Store name, addresses, GSTIN, invoice/table metadata)
+  // Zone 2: Line Items Body (Item names, quantities, unit prices, line totals)
+  // Zone 3: Financial Summary (Subtotal, taxes, charges, roundoff, grand total)
+
+  let bodyStartIndex = 0;
+  let summaryStartIndex = lines.length;
+
+  // Find summaryStartIndex (first financial summary keyword)
   for (let i = 0; i < lines.length; i++) {
-    if (usedLines.has(i)) continue;
+    const text = (lines[i].text || '').trim();
+    if (SUBTOTAL_KEYWORDS.test(text) || (TOTAL_KEYWORDS.test(text) && !/covers|pax|items?\s*\(\d+\s*qty\)/i.test(text))) {
+      summaryStartIndex = i;
+      break;
+    }
+  }
+
+  // Find bodyStartIndex (table header, dashed separator, or after header metadata)
+  for (let i = 0; i < summaryStartIndex; i++) {
+    const text = (lines[i].text || '').trim();
+    if (TABLE_HEADER_REGEX.test(text) || /^[-=_.]{4,}$/.test(text)) {
+      bodyStartIndex = i + 1;
+    } else if (NOISE_KEYWORDS.test(text) || DATE_TIME_REGEX.test(text) || RANDOM_CODE_REGEX.test(text)) {
+      if (i >= bodyStartIndex && i < summaryStartIndex - 1) {
+        bodyStartIndex = i + 1;
+      }
+    }
+  }
+
+  // Safety fallback if boundaries collapsed
+  if (bodyStartIndex >= summaryStartIndex) {
+    bodyStartIndex = 0;
+  }
+
+  // ===== 2. PASS 1: EXTRACT TAXES, CHARGES & TOTALS =====
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const text = (line.text || '').trim();
-    
-    // Skip empty / very short lines
     if (!text || text.length < 2) continue;
-    
-    // Skip lines that are just numbers/dates/dashes
-    if (JUST_NUMBERS.test(text) || JUST_DASHES.test(text)) continue;
+    if (TABLE_HEADER_REGEX.test(text) || JUST_DASHES.test(text)) continue;
 
-    // Skip table header lines like "QTY DESCRIPTION AMOUNT"
-    if (TABLE_HEADER_REGEX.test(text)) continue;
-
-    // Check for grand total (do this first — total keywords can overlap with subtotal)
-    if (TOTAL_KEYWORDS.test(text) && !SUBTOTAL_KEYWORDS.test(text)) {
+    // Check for grand total
+    if (TOTAL_KEYWORDS.test(text) && !SUBTOTAL_KEYWORDS.test(text) && !/covers|pax|items?\s*\(\d+\s*qty\)/i.test(text)) {
       const price = extractPrice(text);
       if (price !== null) {
         total = price;
+        usedLines.add(i);
       }
       continue;
     }
@@ -121,6 +162,7 @@ export function parseReceipt(ocrResult) {
       const price = extractPrice(text);
       if (price !== null) {
         subtotal = price;
+        usedLines.add(i);
       }
       continue;
     }
@@ -130,6 +172,7 @@ export function parseReceipt(ocrResult) {
       const price = extractPrice(text);
       if (price !== null) {
         serviceCharge = price;
+        usedLines.add(i);
       }
       continue;
     }
@@ -150,6 +193,7 @@ export function parseReceipt(ocrResult) {
           taxName += ` ${rateMatch[0].trim()}`;
         }
         taxes.push({ name: taxName, amountPaise: price });
+        usedLines.add(i);
       }
       continue;
     }
@@ -159,6 +203,7 @@ export function parseReceipt(ocrResult) {
       const price = extractPrice(text);
       if (price !== null) {
         discount = price;
+        usedLines.add(i);
       }
       continue;
     }
@@ -169,18 +214,31 @@ export function parseReceipt(ocrResult) {
       if (price !== null) {
         const isNegative = /-\s*\d|minus|\(less\)/i.test(text);
         roundoff = isNegative ? -price : price;
+        usedLines.add(i);
       }
       continue;
     }
+  }
 
-    // Skip noise lines (addresses, pincodes, draft invoices, store metadata)
-    if (NOISE_KEYWORDS.test(text)) continue;
+  // ===== 3. PASS 2: EXTRACT LINE ITEMS (STRICTLY IN ZONE 2) =====
+  for (let i = bodyStartIndex; i < summaryStartIndex; i++) {
+    if (usedLines.has(i)) continue;
+    const line = lines[i];
+    const text = (line.text || '').trim();
+
+    // Skip empty / very short lines / dashes / numbers
+    if (!text || text.length < 2) continue;
+    if (JUST_NUMBERS.test(text) || JUST_DASHES.test(text)) continue;
+    if (TABLE_HEADER_REGEX.test(text)) continue;
+
+    // Skip metadata noise & random codes
+    if (NOISE_KEYWORDS.test(text) || RANDOM_CODE_REGEX.test(text) || DATE_TIME_REGEX.test(text)) continue;
 
     // --- TWO-LINE ITEM CHECK (Rate line with /ea or @) ---
     // e.g. "1@ 169/ea 169.00 ~" or "! 38 20/ea 60.00" or "4 4 999.75/ea 3,999.00"
     const lower = text.toLowerCase();
     const eaIdx = lower.indexOf('/ea');
-    if (eaIdx !== -1 && i > 0) {
+    if (eaIdx !== -1 && i > bodyStartIndex) {
       const before = text.substring(0, eaIdx).trim();
       const after = text.substring(eaIdx + 3).trim();
 
@@ -192,15 +250,15 @@ export function parseReceipt(ocrResult) {
 
       if (lineTotal > 0) {
         let prevIdx = i - 1;
-        while (prevIdx >= 0 && (usedLines.has(prevIdx) || (lines[prevIdx].text || lines[prevIdx] || '').trim().length === 0 || NOISE_KEYWORDS.test(lines[prevIdx].text || lines[prevIdx] || ''))) {
+        while (prevIdx >= bodyStartIndex && (usedLines.has(prevIdx) || (lines[prevIdx].text || lines[prevIdx] || '').trim().length === 0 || NOISE_KEYWORDS.test(lines[prevIdx].text || lines[prevIdx] || ''))) {
           prevIdx--;
         }
-        if (prevIdx >= 0) {
+        if (prevIdx >= bodyStartIndex) {
           let candidateName = (lines[prevIdx].text || lines[prevIdx] || '').trim();
           candidateName = candidateName.replace(/\s+\d+\s*$/, '').trim();
           candidateName = cleanItemName(candidateName);
 
-          if (candidateName.length >= 2 && !NOISE_KEYWORDS.test(candidateName)) {
+          if (candidateName.length >= 2 && !NOISE_KEYWORDS.test(candidateName) && !RANDOM_CODE_REGEX.test(candidateName)) {
             const qty = unitPrice > 0 ? Math.round(lineTotal / unitPrice) : 1;
             items.push({
               id: generateId(),
@@ -208,7 +266,7 @@ export function parseReceipt(ocrResult) {
               qty: qty > 0 ? qty : 1,
               unitPricePaise: unitPrice || Math.round(lineTotal / (qty || 1)),
               totalPaise: lineTotal,
-              category: null,
+              category: classifyItemFast(candidateName),
               assignees: [],
               confidence: getLineConfidence(lines[prevIdx]),
             });
@@ -223,6 +281,7 @@ export function parseReceipt(ocrResult) {
     // Try to parse as single-line item
     const item = parseLineItem(text, line);
     if (item) {
+      item.category = classifyItemFast(item.name);
       items.push(item);
       usedLines.add(i);
     }
@@ -269,14 +328,14 @@ function parseLineItem(text, ocrLine) {
     let name = text.substring(0, nameEnd).trim();
     name = cleanItemName(name);
     
-    if (name && lineTotal > 0 && !NOISE_KEYWORDS.test(name)) {
+    if (name && lineTotal > 0 && !NOISE_KEYWORDS.test(name) && !RANDOM_CODE_REGEX.test(name) && /[a-zA-Z]/.test(name)) {
       return {
         id: generateId(),
         name,
         qty,
         unitPricePaise: unitPrice,
         totalPaise: lineTotal,
-        category: null,
+        category: classifyItemFast(name),
         assignees: [],
         confidence: getLineConfidence(ocrLine),
       };
@@ -340,9 +399,28 @@ function parseLineItem(text, ocrLine) {
 
   let name = cleanItemName(nameText);
 
-  // Skip if name is empty or too short or looks like a total/header/roundoff/noise
-  if (!name || name.length < 2) return null;
-  if (TOTAL_KEYWORDS.test(name) || TAX_KEYWORDS.test(name) || TABLE_HEADER_REGEX.test(name) || ROUNDOFF_KEYWORDS.test(name) || SERVICE_CHARGE_KEYWORDS.test(name) || NOISE_KEYWORDS.test(name)) return null;
+  // Skip if name is empty, too short, or lacks any alphabetic characters (e.g. pure numbers/dates/barcodes)
+  if (!name || name.length < 2 || !/[a-zA-Z]/.test(name)) return null;
+
+  // Discard OCR noise/creases/staple marks (low alphanumeric character density)
+  const alphaNumCount = (name.match(/[a-zA-Z0-9]/g) || []).length;
+  if (alphaNumCount < 2 || (alphaNumCount / name.replace(/\s+/g, '').length) < 0.6) {
+    return null;
+  }
+
+  // Skip if name looks like a total, tax, table header, roundoff, charge, noise, date, or random code
+  if (
+    TOTAL_KEYWORDS.test(name) ||
+    TAX_KEYWORDS.test(name) ||
+    TABLE_HEADER_REGEX.test(name) ||
+    ROUNDOFF_KEYWORDS.test(name) ||
+    SERVICE_CHARGE_KEYWORDS.test(name) ||
+    NOISE_KEYWORDS.test(name) ||
+    RANDOM_CODE_REGEX.test(name) ||
+    DATE_TIME_REGEX.test(name)
+  ) {
+    return null;
+  }
 
   return {
     id: generateId(),
@@ -350,7 +428,7 @@ function parseLineItem(text, ocrLine) {
     qty,
     unitPricePaise,
     totalPaise,
-    category: null,
+    category: classifyItemFast(name),
     assignees: [],
     confidence: getLineConfidence(ocrLine),
   };
@@ -358,13 +436,25 @@ function parseLineItem(text, ocrLine) {
 
 /**
  * Clean up an item name from OCR artifacts.
+ * Strips leading non-alphanumeric noise (e.g. colons ':', currency '¥', quotes '"', bullets '•'),
+ * removes stray leading item index numbers (e.g. '4"', '1.'), and resolves common thermal font OCR confusions.
  */
-function cleanItemName(name) {
+export function cleanItemName(name) {
   if (!name) return '';
   return name
-    .replace(/^[\s.\-#)]+/, '')  // Leading punctuation, dots, hashes, brackets (keep alphanumeric)
-    .replace(/\s{2,}/g, ' ')        // Multiple spaces
-    .replace(/[|\\]/g, '')          // OCR artifacts
+    // 1. Strip leading non-alphanumerics (symbols, colons, currency symbols, quotes, bullets, punctuation)
+    .replace(/^[^a-zA-Z0-9]+/, '')
+    // 2. Strip stray leading item numbers / OCR quote artifacts (e.g. '4" ', '1. ', '2) ', '3- ')
+    .replace(/^\d+["'`\-\.\):#*~]+\s*/, '')
+    // 3. Resolve common thermal dot-matrix font confusion (e.g. '17 Dinner' -> 'TT Dinner')
+    .replace(/\b17\s+(Dinner|Lunch|Buffet)\b/i, (m, w) => 'TT ' + w)
+    // 4. Strip any remaining leading non-alphanumerics exposed by step 2
+    .replace(/^[^a-zA-Z0-9]+/, '')
+    // 5. Strip trailing punctuation/smudges
+    .replace(/[\s:;\-~*|/\\,]+$/, '')
+    // 6. Remove OCR table separators and normalize whitespace
+    .replace(/[|\\]/g, '')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 }
 

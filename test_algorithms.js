@@ -1,4 +1,4 @@
-import { parseReceipt, validateTotal } from './src/logic/receiptParser.js';
+import { parseReceipt, validateTotal, cleanItemName } from './src/logic/receiptParser.js';
 import { calculateItemizedSplit, calculateEqualSplit, calculatePercentageSplit, calculateSharesSplit, computeNetBalances } from './src/logic/splitEngine.js';
 import { simplifyDebts, verifySettlement } from './src/logic/debtSimplifier.js';
 import { formatCurrency, parseRupees, generateUPILink } from './src/utils/formatters.js';
@@ -240,6 +240,100 @@ assert(parsedAB.total === 443940, `Bill Total = ₹4,439.40 (got ${parsedAB.tota
 
 const valAB = validateTotal(parsedAB);
 assert(valAB.valid === true, `Validation passes with ₹0 discrepancy (${valAB.message})`);
+
+console.log('\n[9] Item Name Artifact Cleaning & Symbol Stripping:');
+assert(cleanItemName(': Masala Margarita') === 'Masala Margarita', 'Strips leading colon from ": Masala Margarita"');
+assert(cleanItemName('¥ Water Btl') === 'Water Btl', 'Strips leading yen symbol from "¥ Water Btl"');
+assert(cleanItemName('4" 17 Dinner sun nvg') === 'TT Dinner sun nvg', 'Strips 4" and repairs TT in "4" 17 Dinner sun nvg"');
+assert(cleanItemName('1. MASALA COKE') === 'MASALA COKE', 'Strips leading index from "1. MASALA COKE"');
+assert(cleanItemName('- Chicken Biryani') === 'Chicken Biryani', 'Strips leading dash from "- Chicken Biryani"');
+assert(cleanItemName('• Garlic Naan') === 'Garlic Naan', 'Strips leading bullet from "• Garlic Naan"');
+assert(cleanItemName('7 Up') === '7 Up', 'Preserves legitimate brand name "7 Up"');
+
+// Test end-to-end receipt parsing with dirty OCR output
+const dirtyReceipt = parseReceipt({
+  text: `
+: Masala Margarita
+1 @ 169/ea 169.00
+¥ Water Btl
+3 @ 20/ea 60.00
+4" 17 Dinner sun nvg
+4 @ 999.75/ea 3,999.00
+Total: 4228.00
+`
+});
+assert(dirtyReceipt.items[0].name === 'Masala Margarita', `Dirty item 1 cleaned: "${dirtyReceipt.items[0].name}"`);
+assert(dirtyReceipt.items[1].name === 'Water Btl', `Dirty item 2 cleaned: "${dirtyReceipt.items[1].name}"`);
+assert(dirtyReceipt.items[2].name === 'TT Dinner sun nvg', `Dirty item 3 cleaned: "${dirtyReceipt.items[2].name}"`);
+
+console.log('\n[10] Strict Noise & Random Code Elimination:');
+const noisyTerminalReceipt = `
+========================================
+       SUPER BISTRO & RETAIL
+   12/A HIGHWAY PLAZA, MUMBAI 400072
+GSTIN: 27AABCU9603R1ZM | FSSAI: 11516034000372
+========================================
+ORDER #9042 | DINE IN | TABLE: 14 | PAX: 3
+CAPTAIN: RAMESH | CASHIER: PRIYA | SHIFT: 1
+DATE: 30/10/2026 08:45 PM | POS: 02
+----------------------------------------
+BARCODE: 8901030381029
+ITEM DESCRIPTION          QTY    AMOUNT
+----------------------------------------
+Paneer Tikka               1     250.00
+Butter Garlic Naan         2      90.00
+Fresh Lime Soda            2      80.00
+INV-2026-90428             1     150.00
+GABSPMY2679943             1     200.00
+8901030381029              1     100.00
+----------------------------------------
+Sub Total: 420.00
+CGST 2.5%: 10.50
+SGST 2.5%: 10.50
+TOTAL AMOUNT: 441.00
+----------------------------------------
+PAYMENT: VISA DEBIT
+CARD: ************4821
+AUTH CODE: 092831 | TID: 90283401
+AID: A0000000041010 | RRN: 9283471029
+BATCH: 000142 | TRACE: 009214
+CUSTOMER COPY | CHIP READ
+WWW.SUPERBISTRO.COM
+THANK YOU! VISIT AGAIN
+`;
+
+const parsedNoisy = parseReceipt({ text: noisyTerminalReceipt });
+assert(parsedNoisy.items.length === 3, `Extracted exactly 3 genuine items, rejected all random codes/metadata (got ${parsedNoisy.items.length})`);
+assert(parsedNoisy.items[0].name === 'Paneer Tikka', `Item 1 is Paneer Tikka (got "${parsedNoisy.items[0]?.name}")`);
+assert(parsedNoisy.items[1].name === 'Butter Garlic Naan', `Item 2 is Butter Garlic Naan (got "${parsedNoisy.items[1]?.name}")`);
+assert(parsedNoisy.items[2].name === 'Fresh Lime Soda', `Item 3 is Fresh Lime Soda (got "${parsedNoisy.items[2]?.name}")`);
+assert(parsedNoisy.subtotal === 42000, `Subtotal = ₹420.00 (got ${parsedNoisy.subtotal})`);
+assert(parsedNoisy.total === 44100, `Grand Total = ₹441.00 (got ${parsedNoisy.total})`);
+
+console.log('\n[11] Automatic Item Categorization (Tier 2 Requirement):');
+assert(parsedNoisy.items[0].category === 'Food', `Paneer Tikka categorized as Food (got "${parsedNoisy.items[0]?.category}")`);
+assert(parsedNoisy.items[1].category === 'Food', `Butter Garlic Naan categorized as Food (got "${parsedNoisy.items[1]?.category}")`);
+assert(parsedNoisy.items[2].category === 'Food', `Fresh Lime Soda categorized as Food (got "${parsedNoisy.items[2]?.category}")`);
+assert(parsedAB.items[1].category === 'Groceries', `Water Btl categorized as Groceries (got "${parsedAB.items[1]?.category}")`);
+
+const groceryReceipt = parseReceipt({
+  text: `
+Milk Carton 60.00
+Eggs 12pk 95.00
+Bread Loaf 45.00
+Uber Airport Cab 650.00
+Cinema Tickets IMAX 700.00
+Wi-Fi Monthly Bill 999.00
+Office Pen Set 120.00
+Total: 2669.00
+`
+});
+assert(groceryReceipt.items.find(i => i.name.includes('Milk'))?.category === 'Groceries', 'Milk -> Groceries');
+assert(groceryReceipt.items.find(i => i.name.includes('Eggs'))?.category === 'Groceries', 'Eggs -> Groceries');
+assert(groceryReceipt.items.find(i => i.name.includes('Uber'))?.category === 'Travel', 'Uber -> Travel');
+assert(groceryReceipt.items.find(i => i.name.includes('Cinema'))?.category === 'Entertainment', 'Cinema -> Entertainment');
+assert(groceryReceipt.items.find(i => i.name.includes('Wi-Fi'))?.category === 'Utilities', 'Wi-Fi -> Utilities');
+assert(groceryReceipt.items.find(i => i.name.includes('Pen'))?.category === 'Other', 'Pen -> Other');
 
 console.log(`\n========================================`);
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
