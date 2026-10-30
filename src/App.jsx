@@ -1986,12 +1986,29 @@ function ReviewEditor() {
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--ink-primary)' }}>Parsed Items</h3>
                   <span style={{ fontSize: '0.85rem', color: 'var(--ink-muted)' }}>({items.length})</span>
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button className="btn btn-sm btn-ghost" onClick={() => setShowRawOCR(true)} title="View & edit raw OCR text">
                     📜 Raw OCR
                   </button>
                   <button className="btn btn-sm btn-secondary" onClick={handleReparseOCR} title="Re-parse with smart heuristics">
                     ⚡ Re-parse
+                  </button>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={async () => {
+                      toast('🤖 Running MobileBERT Zero-Shot AI Categorization...', 'info');
+                      try {
+                        const { classifyItems } = await import('./logic/categorizer');
+                        const updated = await classifyItems(items);
+                        setItems(updated);
+                        toast('✨ All items categorized with MobileBERT!', 'success');
+                      } catch (err) {
+                        toast('AI Categorizer: ' + err.message, 'warning');
+                      }
+                    }}
+                    title="Classify items with Xenova/mobilebert-uncased-mnli"
+                  >
+                    🤖 AI Categorize
                   </button>
                   <button className="btn btn-sm btn-primary" onClick={addItem}>+ Add Item</button>
                 </div>
@@ -2022,11 +2039,20 @@ function ReviewEditor() {
                               ⚠️ Low confidence
                             </span>
                           )}
-                          {item.category && (
-                            <span className={`category-pill ${CATEGORIES[item.category]?.cssClass || 'category-other'}`} style={{ marginTop: 2 }}>
-                              {CATEGORIES[item.category]?.emoji} {item.category}
-                            </span>
-                          )}
+                          <div style={{ marginTop: 4 }}>
+                            <select
+                              className={`category-pill ${CATEGORIES[item.category]?.cssClass || 'category-other'}`}
+                              value={item.category || 'Other'}
+                              onChange={e => updateItem(idx, 'category', e.target.value)}
+                              style={{ cursor: 'pointer', border: 'none', padding: '2px 8px', borderRadius: 12, fontSize: '0.72rem', fontWeight: 600 }}
+                            >
+                              {Object.keys(CATEGORIES).map(cat => (
+                                <option key={cat} value={cat} style={{ background: '#1c1b22', color: '#fff' }}>
+                                  {CATEGORIES[cat]?.emoji} {cat}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </td>
                         <td>
                           <input className="input input-sm input-mono" type="number" min="1" value={item.qty}

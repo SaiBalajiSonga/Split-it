@@ -10,11 +10,8 @@
  * 3. Never blocks the UI or initial screen rendering.
  */
 
-import { pipeline, env } from '@xenova/transformers';
-
-// Configure transformers.js for client-side browser execution
-env.allowLocalModels = false;
-env.useBrowserCache = true;
+// Lazy-loaded transformers references so initial app bundle stays tiny (< 150KB)
+let pipelineRef = null;
 
 export const CANDIDATE_CATEGORIES = [
   'Food',
@@ -92,7 +89,13 @@ export async function loadClassifierModel(onProgress) {
 
   isModelLoading = true;
   try {
-    zeroShotClassifier = await pipeline(
+    if (!pipelineRef) {
+      const { pipeline, env } = await import('@xenova/transformers');
+      env.allowLocalModels = false;
+      env.useBrowserCache = true;
+      pipelineRef = pipeline;
+    }
+    zeroShotClassifier = await pipelineRef(
       'zero-shot-classification',
       'Xenova/mobilebert-uncased-mnli',
       {
@@ -118,6 +121,11 @@ export async function classifyItemZeroShot(itemName) {
   const fastCategory = classifyItemFast(itemName);
   if (fastCategory !== 'Other') {
     return fastCategory;
+  }
+
+  // If fast taxonomy didn't find a high-confidence match, load model and run zero-shot
+  if (!zeroShotClassifier) {
+    await loadClassifierModel();
   }
 
   // If model is ready, run zero-shot inference
