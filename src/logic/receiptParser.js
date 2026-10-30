@@ -153,7 +153,13 @@ export function parseReceipt(ocrResult) {
     // Look ahead to immediate next line if it contains a standalone price
     if (startIdx + 1 < lines.length && !usedLines.has(startIdx + 1)) {
       const nextText = (lines[startIdx + 1]?.text || lines[startIdx + 1] || '').trim();
-      if (!TAX_KEYWORDS.test(nextText) && !TOTAL_KEYWORDS.test(nextText) && !SUBTOTAL_KEYWORDS.test(nextText)) {
+      if (
+        !TAX_KEYWORDS.test(nextText) &&
+        !TOTAL_KEYWORDS.test(nextText) &&
+        !SUBTOTAL_KEYWORDS.test(nextText) &&
+        !ROUNDOFF_KEYWORDS.test(nextText) &&
+        !SERVICE_CHARGE_KEYWORDS.test(nextText)
+      ) {
         const nextPrice = extractPrice(nextText);
         if (nextPrice !== null) {
           return { price: nextPrice, usedIdx: startIdx + 1 };
@@ -366,6 +372,47 @@ export function parseReceipt(ocrResult) {
         }
       }
     }
+
+    // Fallback: Check if line starts with a quantity and looks like an item where glare ruined the price
+    if (!usedLines.has(i)) {
+      const unpricedMatch = text.match(/^(\d{1,2})\s+([A-Za-z][A-Za-z\s'*\-]{2,30})/);
+      if (
+        unpricedMatch &&
+        !TAX_KEYWORDS.test(text) &&
+        !TOTAL_KEYWORDS.test(text) &&
+        !SUBTOTAL_KEYWORDS.test(text) &&
+        !TABLE_HEADER_REGEX.test(text) &&
+        !NOISE_KEYWORDS.test(text)
+      ) {
+        const qty = parseInt(unpricedMatch[1], 10);
+        const name = cleanItemName(unpricedMatch[2]);
+        if (name && name.length >= 3) {
+          items.push({
+            id: generateId(),
+            name,
+            qty,
+            unitPricePaise: 0,
+            totalPaise: 0,
+            category: classifyItemFast(name),
+            assignees: [],
+            confidence: 50,
+          });
+          usedLines.add(i);
+        }
+      }
+    }
+  }
+
+  // If exactly one item has 0 price, but subtotal is present and > sum of other items:
+  // Reconcile the missing item's price mathematically from the subtotal difference!
+  const unpricedItems = items.filter(it => it.totalPaise === 0);
+  const pricedItemsSum = items.reduce((sum, it) => sum + it.totalPaise, 0);
+  if (unpricedItems.length === 1 && subtotal && subtotal > pricedItemsSum) {
+    const missingPaise = subtotal - pricedItemsSum;
+    const targetItem = unpricedItems[0];
+    targetItem.totalPaise = missingPaise;
+    targetItem.unitPricePaise = Math.round(missingPaise / (targetItem.qty || 1));
+    targetItem.confidence = 90;
   }
 
   // Robust total calculation & sanity check
@@ -375,8 +422,13 @@ export function parseReceipt(ocrResult) {
   const disc = discount || 0;
   const computed = itemsTotal + taxTotal + sc - disc + roundoff;
 
-  // If detected total is missing or completely unreasonable (< subtotal), auto-correct to computed!
-  if (total === null || (subtotal && total < subtotal) || (itemsTotal > 0 && total < itemsTotal)) {
+  // If detected total is missing or completely unreasonable (< subtotal or > computed * 1.35), auto-correct to computed!
+  if (
+    total === null ||
+    (subtotal && total < subtotal) ||
+    (itemsTotal > 0 && total < itemsTotal) ||
+    (computed > 0 && total > computed * 1.35)
+  ) {
     total = computed;
   }
 
