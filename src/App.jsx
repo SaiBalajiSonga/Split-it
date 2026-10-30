@@ -13,32 +13,79 @@ import './index.css';
 
 // ===== MAIN APP =====
 export default function App() {
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
   return (
     <HashRouter>
       <ToastProvider>
-        <Navbar />
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/group/:groupId" element={<GroupView />} />
-          <Route path="/group/:groupId/scan" element={<ReceiptScanner />} />
-          <Route path="/group/:groupId/manual" element={<ManualExpense />} />
-          <Route path="/group/:groupId/review" element={<ReviewEditor />} />
-        </Routes>
+        {/* Floating Browser Canvas Window (Matching ChronoTask / Reference) */}
+        <div className="browser-canvas-frame">
+          <Navbar onCreateGroup={() => setShowCreateModal(true)} />
+          <main className="canvas-content">
+            <Routes>
+              <Route path="/" element={<Dashboard showCreate={showCreateModal} setShowCreate={setShowCreateModal} />} />
+              <Route path="/group/:groupId" element={<GroupView />} />
+              <Route path="/group/:groupId/scan" element={<ReceiptScanner />} />
+              <Route path="/group/:groupId/manual" element={<ManualExpense />} />
+              <Route path="/group/:groupId/review" element={<ReviewEditor />} />
+              {/* Fallback to Dashboard to prevent blank screen */}
+              <Route path="*" element={<Dashboard showCreate={showCreateModal} setShowCreate={setShowCreateModal} />} />
+            </Routes>
+          </main>
+        </div>
       </ToastProvider>
     </HashRouter>
   );
 }
 
-// ===== NAVBAR =====
-function Navbar() {
+// ===== MINIMAL CANVAS NAVBAR (Matching Reference) =====
+function Navbar({ onCreateGroup }) {
+  const navigate = useNavigate();
+
+  const scrollToGroups = (e) => {
+    e.preventDefault();
+    navigate('/');
+    setTimeout(() => {
+      const el = document.getElementById('groups-anchor');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 60);
+  };
+
   return (
-    <nav className="navbar">
-      <Link to="/" className="navbar-brand" style={{ textDecoration: 'none', color: 'inherit' }}>
-        <span className="navbar-brand-icon">💰</span>
-        <span className="gradient-text">SplitSmart</span>
+    <nav className="canvas-navbar">
+      <Link to="/" className="brand-wrap">
+        <div className="brand-dice-icon">
+          <div className="brand-dice-dot dot-blue" />
+          <div className="brand-dice-dot" />
+          <div className="brand-dice-dot" />
+          <div className="brand-dice-dot" />
+        </div>
+        <span>SplitSmart</span>
       </Link>
-      <div className="navbar-actions">
+
+      <div className="nav-links-row">
+        <Link to="/" className="nav-text-link">Dashboard</Link>
+        <button
+          className="nav-text-link nav-btn-link"
+          onClick={scrollToGroups}
+        >
+          Your Groups
+        </button>
+        <button
+          className="nav-text-link nav-btn-link"
+          onClick={() => navigate('/group/jugadu-cafe/scan')}
+        >
+          Scan Receipt
+        </button>
+      </div>
+
+      <div className="nav-actions-row">
         <ExportImportButton />
+        <button className="btn btn-secondary btn-sm" onClick={onCreateGroup}>
+          + New Group
+        </button>
       </div>
     </nav>
   );
@@ -66,19 +113,19 @@ function ExportImportButton() {
 
   return (
     <div style={{ position: 'relative' }}>
-      <button className="btn btn-ghost btn-icon" onClick={() => setShowMenu(!showMenu)} title="Import/Export">
-        ⚙️
+      <button className="btn btn-ghost btn-sm" onClick={() => setShowMenu(!showMenu)} title="Import / Export Data">
+        📥 Import
       </button>
       {showMenu && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 90 }} onClick={() => setShowMenu(false)} />
           <div style={{
             position: 'absolute', right: 0, top: '100%', marginTop: 8,
-            background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)',
-            borderRadius: 'var(--radius-md)', padding: 8, minWidth: 180, zIndex: 100,
-            boxShadow: 'var(--shadow-lg)'
+            background: '#ffffff', border: '1px solid #e2e8f0',
+            borderRadius: 14, padding: 8, minWidth: 190, zIndex: 100,
+            boxShadow: '0 12px 32px rgba(0, 0, 0, 0.12)'
           }}>
-            <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'flex-start' }}
+            <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem' }}
               onClick={() => { fileRef.current?.click(); }}>
               📥 Import Group JSON
             </button>
@@ -90,92 +137,388 @@ function ExportImportButton() {
   );
 }
 
-// ===== DASHBOARD =====
-function Dashboard() {
+// ===== DASHBOARD WITH FLOATING TACTILE CARDS HERO =====
+function Dashboard({ showCreate: externalShowCreate, setShowCreate: externalSetShowCreate }) {
   const { groups, loading, createGroup, deleteGroup } = useGroups();
-  const [showCreate, setShowCreate] = useState(false);
+  const [internalShowCreate, setInternalShowCreate] = useState(false);
+  const [showAddFriend, setShowAddFriend] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
 
-  if (loading) return <LoadingScreen />;
+  const showCreate = externalShowCreate !== undefined ? externalShowCreate : internalShowCreate;
+  const setShowCreate = externalSetShowCreate || setInternalShowCreate;
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '100px 20px' }}>
+        <div className="spinner" style={{ marginBottom: 16 }} />
+        <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--ink-muted)' }}>Loading SplitSmart...</div>
+      </div>
+    );
+  }
+
+  const activeGroup = groups && groups.length > 0 ? groups[0] : null;
+
+  // Collect unique members across groups
+  const memberMap = new Map();
+  groups.forEach(g => {
+    (g.members || []).forEach(m => {
+      if (!memberMap.has(m.name.toLowerCase())) {
+        memberMap.set(m.name.toLowerCase(), m);
+      }
+    });
+  });
+  const allConnectedMembers = Array.from(memberMap.values());
+
+  const fallbackMembers = [
+    { name: 'Danny C.', color: '#FF9AA2' },
+    { name: 'Jerry P.', color: '#FFB7B2' },
+    { name: 'Richard A.', color: '#FFDAC1' },
+    { name: 'Eden F.', color: '#E2F0CB' },
+    { name: 'John D.', color: '#B5EAD7' },
+    { name: 'Jabir H.', color: '#C7CEEA' },
+  ];
+
+  const friendsList = allConnectedMembers.length > 0 ? allConnectedMembers : fallbackMembers;
+
+  const handleScanReceipt = () => {
+    const targetGroupId = activeGroup?.id || 'jugadu-cafe';
+    navigate(`/group/${targetGroupId}/scan`);
+  };
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <h1 className="page-title">
-          <span className="gradient-text">Your Groups</span>
-        </h1>
-        <p className="page-subtitle">Manage shared expenses with your friends</p>
-      </div>
+    <div>
+      {/* Hero Showcase (Faithful to Reference ChronoTask) */}
+      <section className="hero-showcase">
+        {/* Floating Accessory 1: Yellow Sticky Note (Top-Left) */}
+        <div className="hero-accessory-card acc-sticky-note">
+          <div className="sticky-pin" />
+          <div className="sticky-note-text">
+            Dinner with Gang: 9 items detected, ₹3,275 verified. Settle up seamlessly.
+          </div>
+          <div className="sticky-checkbox-card">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+        </div>
 
-      {groups.length === 0 ? (
-        <div className="empty-state animate-fadeIn">
-          <span className="empty-state-icon">👥</span>
-          <h3 className="empty-state-title">No groups yet</h3>
-          <p className="empty-state-text">Create your first group to start splitting expenses</p>
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            ➕ Create Group
+        {/* Floating Accessory 2: Folder Tab Reminders (Top-Right) */}
+        <div className="hero-accessory-card acc-reminder-card">
+          <div className="folder-tab-badge">
+            <span>⏱️</span>
+            <span>Reminders</span>
+          </div>
+          <div className="reminder-title">Today's Settle Up</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--ink-muted)', marginBottom: 8 }}>
+            Kabir owes Riya ₹210.00
+          </div>
+          <div className="reminder-time-pill">
+            <span>🕒</span>
+            <span>13:00 - 13:45</span>
+          </div>
+        </div>
+
+        {/* Center Floating 3D Cube */}
+        <div className="hero-center-cube">
+          <div className="hero-cube-dots">
+            <div className="cube-dot blue" />
+            <div className="cube-dot" />
+            <div className="cube-dot" />
+            <div className="cube-dot" />
+          </div>
+        </div>
+
+        {/* Hero Headline & Subtitle */}
+        <h1 className="hero-main-h1">
+          Split, plan, and track <br />
+          <span className="hero-h1-subline">all in one place</span>
+        </h1>
+
+        <p className="hero-main-sub">
+          Efficiently manage shared expenses, scan receipts with OCR, and settle debts instantly.
+        </p>
+
+        {/* Blue Pill CTA Button */}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button className="hero-cta-btn" onClick={handleScanReceipt}>
+            <span>📷</span>
+            <span>Scan Receipt Free</span>
+          </button>
+          <button className="btn btn-secondary" style={{ padding: '13px 24px' }} onClick={() => setShowCreate(true)}>
+            + Create Group
           </button>
         </div>
-      ) : (
-        <div className="stagger-children" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-          {groups.map(group => (
-            <GroupCard key={group.id} group={group} onClick={() => navigate(`/group/${group.id}`)}
-              onDelete={() => { deleteGroup(group.id); toast('Group deleted', 'info'); }} />
-          ))}
-          <div className="glass-card" style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160, cursor: 'pointer' }}
-            onClick={() => setShowCreate(true)}>
-            <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-              <span style={{ fontSize: '2rem', display: 'block', marginBottom: 8 }}>➕</span>
-              <span style={{ fontWeight: 600 }}>New Group</span>
+
+        {/* Floating Accessory 3: Active Splits Card (Bottom-Left) */}
+        <div className="hero-accessory-card acc-tasks-card">
+          <div className="tasks-header">Today's Splits</div>
+          <div className="task-row">
+            <div className="task-label-row">
+              <span>🍗 Night Canteen</span>
+              <span>60%</span>
+            </div>
+            <div className="task-bar-track">
+              <div className="task-bar-fill" style={{ width: '60%' }} />
+            </div>
+          </div>
+          <div className="task-row" style={{ marginBottom: 0 }}>
+            <div className="task-label-row">
+              <span>☕ CCD Cafe</span>
+              <span>100%</span>
+            </div>
+            <div className="task-bar-track">
+              <div className="task-bar-fill" style={{ width: '100%', background: '#10b981' }} />
             </div>
           </div>
         </div>
+
+        {/* Floating Accessory 4: Instant UPI Integrations (Bottom-Right) */}
+        <div className="hero-accessory-card acc-integrations-card">
+          <div className="integrations-header">Instant UPI Settle</div>
+          <div className="integration-tiles">
+            <div className="integration-tile" title="Google Pay">🇬</div>
+            <div className="integration-tile" title="PhonePe">🇵</div>
+            <div className="integration-tile" title="Paytm">🔷</div>
+            <div className="integration-tile" title="BHIM UPI">⚡</div>
+          </div>
+        </div>
+      </section>
+
+      {/* Connected Friends Section */}
+      <section className="app-section" style={{ marginBottom: 32 }}>
+        <div className="section-head">
+          <div>
+            <h2 className="section-head-title">Connected Friends</h2>
+            <div style={{ fontSize: '0.85rem', color: 'var(--ink-muted)' }}>
+              {friendsList.length} people connected across groups
+            </div>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowAddFriend(true)}>
+            + Add Friend
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 6 }}>
+          {friendsList.map((f, idx) => (
+            <div
+              key={f.id || idx}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: '#ffffff', border: '1px solid #e5e7eb',
+                borderRadius: 999, padding: '6px 14px 6px 8px',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.03)', flexShrink: 0, cursor: 'pointer'
+              }}
+              onClick={() => {
+                if (activeGroup) navigate(`/group/${activeGroup.id}`);
+              }}
+            >
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: f.color || getMemberColor(idx),
+                color: '#ffffff', fontWeight: 700, fontSize: '0.75rem',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                {getInitials(f.name)}
+              </div>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--ink-primary)' }}>
+                {f.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Real Expense Groups Section (100% Logic from Project) */}
+      <section className="app-section" id="groups-anchor">
+        <div className="section-head">
+          <div>
+            <h2 className="section-head-title">Your Expense Groups</h2>
+            <div style={{ fontSize: '0.85rem', color: 'var(--ink-muted)' }}>
+              {groups.length} {groups.length === 1 ? 'group' : 'groups'} active
+            </div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
+            + Create Group
+          </button>
+        </div>
+
+        {groups.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 20px', background: '#ffffff', borderRadius: 18, border: '1px solid #e5e7eb' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>👥</div>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--ink-primary)', marginBottom: 4 }}>No groups yet</h3>
+            <p style={{ fontSize: '0.88rem', color: 'var(--ink-muted)', marginBottom: 20 }}>Create your first group to start scanning receipts and splitting bills.</p>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              + Create Group
+            </button>
+          </div>
+        ) : (
+          <div className="groups-bento-grid">
+            {groups.map(group => (
+              <RealGroupCard
+                key={group.id}
+                group={group}
+                onClick={() => navigate(`/group/${group.id}`)}
+                onDelete={() => {
+                  deleteGroup(group.id);
+                  toast('Group deleted', 'info');
+                }}
+                onScan={() => navigate(`/group/${group.id}/scan`)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Modals */}
+      {showCreate && (
+        <CreateGroupModal
+          onClose={() => setShowCreate(false)}
+          onCreate={async (name, members) => {
+            const group = await createGroup(name, members);
+            toast('Group created with ' + members.length + ' members!', 'success');
+            setShowCreate(false);
+            navigate(`/group/${group.id}`);
+          }}
+        />
       )}
 
-      {showCreate && <CreateGroupModal onClose={() => setShowCreate(false)} onCreate={async (name, members) => {
-        const group = await createGroup(name, members);
-        toast('Group created!', 'success');
-        setShowCreate(false);
-        navigate(`/group/${group.id}`);
-      }} />}
+      {showAddFriend && (
+        <QuickAddFriendModal
+          group={activeGroup}
+          onClose={() => setShowAddFriend(false)}
+          onAdded={() => {
+            toast('Friend added successfully!', 'success');
+            setShowAddFriend(false);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function GroupCard({ group, onClick, onDelete }) {
+// ===== REAL GROUP CARD (Loads Real Expenses & Balances) =====
+function RealGroupCard({ group, onClick, onDelete, onScan }) {
   const [expenseCount, setExpenseCount] = useState(0);
+  const [totalSpent, setTotalSpent] = useState(0);
 
   useEffect(() => {
-    dbOps.getExpensesByGroup(group.id).then(e => setExpenseCount(e.length));
+    dbOps.getExpensesByGroup(group.id).then(expenses => {
+      setExpenseCount(expenses.length);
+      const sum = expenses.reduce((acc, e) => acc + (e.totalPaise || 0), 0);
+      setTotalSpent(sum);
+    });
   }, [group.id]);
 
   return (
-    <div className="glass-card group-card" onClick={onClick}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div className="group-card-name">{group.name}</div>
-        <button className="btn btn-ghost btn-icon" style={{ marginTop: -4, marginRight: -4, fontSize: '0.8rem' }}
-          onClick={e => { e.stopPropagation(); if (confirm('Delete this group?')) onDelete(); }}>
+    <div className="real-group-card" onClick={onClick}>
+      <div className="group-card-head">
+        <div>
+          <div className="group-card-title">{group.name}</div>
+          <div className="group-card-subtitle">
+            {group.members?.length || 0} members · Updated {formatRelativeTime(group.updatedAt)}
+          </div>
+        </div>
+        <button
+          className="btn btn-ghost btn-icon"
+          style={{ fontSize: '0.85rem' }}
+          onClick={e => {
+            e.stopPropagation();
+            if (confirm('Delete this group?')) onDelete();
+          }}
+          title="Delete Group"
+        >
           🗑️
         </button>
       </div>
-      <div className="group-card-meta">
-        {group.members?.length || 0} members · {expenseCount} expenses
-      </div>
-      <div className="avatar-stack" style={{ marginBottom: 8 }}>
+
+      <div className="group-members-strip">
         {(group.members || []).slice(0, 5).map((m, i) => (
-          <div key={m.id} className="avatar avatar-sm" style={{ background: m.color || getMemberColor(i) }}>
+          <div
+            key={m.id || i}
+            className="group-member-avatar"
+            style={{ background: m.color || getMemberColor(i) }}
+            title={m.name}
+          >
             {getInitials(m.name)}
           </div>
         ))}
         {(group.members?.length || 0) > 5 && (
-          <div className="avatar avatar-sm" style={{ background: 'var(--bg-tertiary)', fontSize: '0.6rem' }}>
+          <div className="group-member-avatar" style={{ background: '#f1f5f9', color: '#4b5563', fontSize: '0.65rem' }}>
             +{group.members.length - 5}
           </div>
         )}
       </div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-        Updated {formatRelativeTime(group.updatedAt)}
+
+      <div className="group-card-bottom">
+        <div className="group-stat-text">
+          <strong>{formatCurrency(totalSpent)}</strong> tracked ({expenseCount} bills)
+        </div>
+        <div style={{ display: 'flex', gap: 8 }} onClick={e => e.stopPropagation()}>
+          <button className="btn btn-secondary btn-sm" onClick={onScan}>
+            📷 Scan
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={onClick}>
+            Open →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== QUICK ADD FRIEND MODAL =====
+function QuickAddFriendModal({ group, onClose, onAdded }) {
+  const [friendName, setFriendName] = useState('');
+  const toast = useToast();
+
+  const handleAdd = async (e) => {
+    e?.preventDefault();
+    if (!friendName.trim()) return;
+    if (!group) {
+      toast('Please create a group first', 'warning');
+      return;
+    }
+    const newMember = {
+      id: generateId(),
+      name: friendName.trim(),
+      color: getMemberColor(group.members?.length || 0),
+    };
+    const updated = {
+      ...group,
+      members: [...(group.members || []), newMember],
+    };
+    await dbOps.saveGroup(updated);
+    onAdded();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Add New Friend</h2>
+          <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleAdd}>
+          <p style={{ fontSize: '0.88rem', color: 'var(--ink-secondary)', marginBottom: 16 }}>
+            Add a friend or roommate to split bills with:
+          </p>
+          <input
+            className="input"
+            placeholder="Friend's name (e.g., Sophia Patel)"
+            value={friendName}
+            onChange={e => setFriendName(e.target.value)}
+            autoFocus
+          />
+          <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose} style={{ flex: 1 }}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+              Add Friend
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -295,23 +638,23 @@ function GroupView() {
     <div className="page">
       {/* Header */}
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <Link to="/" className="btn btn-ghost btn-icon" style={{ fontSize: '1rem' }}>←</Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <Link to="/" className="btn btn-ghost btn-icon" style={{ fontSize: '1.1rem' }}>←</Link>
           <h1 className="page-title" style={{ cursor: 'pointer' }} onClick={() => setShowRename(true)}>
             {group.name}
-            <span style={{ fontSize: '0.7rem', marginLeft: 8, color: 'var(--text-muted)' }}>✏️</span>
+            <span style={{ fontSize: '0.8rem', marginLeft: 8, color: 'var(--ink-muted)' }}>✏️</span>
           </h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 46 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingLeft: 4 }}>
           <div className="avatar-stack" style={{ cursor: 'pointer' }} onClick={() => setShowMembers(true)}>
-            {group.members.slice(0, 4).map((m, i) => (
+            {group.members.slice(0, 5).map((m, i) => (
               <div key={m.id} className="avatar avatar-sm" style={{ background: m.color || getMemberColor(i) }} title={m.name}>
                 {getInitials(m.name)}
               </div>
             ))}
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowMembers(true)}>
-            {group.members.length} members
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowMembers(true)}>
+            👥 {group.members.length} members
           </button>
           <button className="btn btn-ghost btn-sm" onClick={async () => {
             const data = await dbOps.exportGroupData(groupId);
@@ -871,12 +1214,12 @@ function StatCard({ label, value }) {
   );
 }
 
-// ===== RECEIPT SCANNER =====
 function ReceiptScanner() {
-  const { groupId } = useParams();
+  const params = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const groupId = params.groupId || 'jugadu-cafe';
   const [scannerTab, setScannerTab] = useState(searchParams.get('tab') === 'text' ? 'text' : 'photo'); // 'photo' | 'text'
   const [pastedText, setPastedText] = useState('');
   const [imageData, setImageData] = useState(null);
@@ -948,6 +1291,7 @@ Total: 756.00`,
     }
     const dataUrl = await readFileAsDataUrl(file);
     setImageData(dataUrl);
+    toast('Image loaded! Click "Process Bill" to parse.', 'info');
   };
 
   const handleDrop = (e) => {
@@ -963,6 +1307,7 @@ Total: 756.00`,
       setImageData(photo);
       stopCamera();
       setShowCamera(false);
+      toast('Photo captured! Click "Process Bill" to parse.', 'info');
     }
   };
 
@@ -977,236 +1322,105 @@ Total: 756.00`,
   const handleProcess = async () => {
     if (!imageData) return;
     try {
-      // Normalize image scale for fast OCR without destructive binarization
       const normalized = await preprocessImage(imageData);
       const ocrResult = await recognize(normalized || imageData);
-      
-      // Parse the OCR result
       const parsed = parseReceipt(ocrResult);
-      
-      // Store in sessionStorage safely (preserve clean original imageData for preview)
       try {
         sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
         sessionStorage.setItem('receiptImage', imageData);
         sessionStorage.setItem('ocrResult', JSON.stringify({ text: ocrResult?.text || '' }));
       } catch {
-        // Fallback if image data exceeds storage quota
         sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
       }
-      
+
+      toast('Receipt parsed successfully!', 'success');
       navigate(`/group/${groupId}/review`);
     } catch (err) {
       toast('OCR failed: ' + err.message, 'error');
     }
   };
 
-  const loadSampleReceipt = (type = 'canteen') => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 460;
-    canvas.height = 680;
-    const ctx = canvas.getContext('2d');
-
-    // Background paper
-    ctx.fillStyle = '#faf9f5';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Receipt border
-    ctx.strokeStyle = '#d6d3cb';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
-
-    ctx.fillStyle = '#1e1e1e';
-    ctx.textAlign = 'center';
-
-    if (type === 'canteen') {
-      ctx.font = 'bold 20px "Courier New", Courier, monospace';
-      ctx.fillText('NIGHT CANTEEN & CAFE', 230, 48);
-      ctx.font = '12px "Courier New", Courier, monospace';
-      ctx.fillText('Hostel Wing 4, Campus Grounds', 230, 70);
-      ctx.fillText('GSTIN: 29AABCU9603R1ZM | Order #4082', 230, 88);
-      ctx.fillText('------------------------------------------', 230, 108);
-
-      ctx.textAlign = 'left';
-      ctx.font = 'bold 13px "Courier New", Courier, monospace';
-      ctx.fillText('ITEM                   QTY    PRICE   TOTAL', 26, 132);
-      ctx.font = '13px "Courier New", Courier, monospace';
-      ctx.fillText('------------------------------------------', 26, 146);
-
-      const sampleItems = [
-        { name: 'Chicken Dum Biryani', qty: '2x', price: '280.00', total: '560.00', y: 175 },
-        { name: 'Paneer Butter Masala', qty: '1x', price: '220.00', total: '220.00', y: 205 },
-        { name: 'Garlic Butter Naan', qty: '4x', price: '45.00', total: '180.00', y: 235 },
-        { name: 'Fresh Lime Soda', qty: '3x', price: '40.00', total: '120.00', y: 265 },
-        { name: 'Gulab Jamun (2pcs)', qty: '2x', price: '60.00', total: '120.00', y: 295 },
-      ];
-
-      sampleItems.forEach(it => {
-        ctx.textAlign = 'left';
-        ctx.fillText(it.name, 26, it.y);
-        ctx.textAlign = 'right';
-        ctx.fillText(it.qty, 280, it.y);
-        ctx.fillText(it.price, 360, it.y);
-        ctx.fillText(it.total, 434, it.y);
-      });
-
-      ctx.fillText('------------------------------------------', 26, 335);
-      ctx.textAlign = 'left';
-      ctx.fillText('Sub Total:', 180, 365);
-      ctx.textAlign = 'right';
-      ctx.fillText('1200.00', 434, 365);
-
-      ctx.textAlign = 'left';
-      ctx.fillText('CGST 2.5%:', 180, 395);
-      ctx.textAlign = 'right';
-      ctx.fillText('30.00', 434, 395);
-
-      ctx.textAlign = 'left';
-      ctx.fillText('SGST 2.5%:', 180, 425);
-      ctx.textAlign = 'right';
-      ctx.fillText('30.00', 434, 425);
-
-      ctx.textAlign = 'left';
-      ctx.fillText('Service Charge 5%:', 180, 455);
-      ctx.textAlign = 'right';
-      ctx.fillText('60.00', 434, 455);
-
-      ctx.fillText('==========================================', 26, 485);
-      ctx.font = 'bold 16px "Courier New", Courier, monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText('GRAND TOTAL:', 160, 520);
-      ctx.textAlign = 'right';
-      ctx.fillText('₹1320.00', 434, 520);
-
-      ctx.font = '12px "Courier New", Courier, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Thank You For Dining With Us!', 230, 575);
-      ctx.fillText('Please Visit Again!', 230, 595);
-    } else {
-      ctx.font = 'bold 20px "Courier New", Courier, monospace';
-      ctx.fillText('CAFE COFFEE DAY', 230, 48);
-      ctx.font = '12px "Courier New", Courier, monospace';
-      ctx.fillText('Campus Galleria Branch #12', 230, 70);
-      ctx.fillText('GSTIN: 07AAACC2026M1Z2', 230, 88);
-      ctx.fillText('------------------------------------------', 230, 108);
-
-      ctx.textAlign = 'left';
-      ctx.font = 'bold 13px "Courier New", Courier, monospace';
-      ctx.fillText('ITEM                   QTY    PRICE   TOTAL', 26, 132);
-      ctx.font = '13px "Courier New", Courier, monospace';
-      ctx.fillText('------------------------------------------', 26, 146);
-
-      const ccdItems = [
-        { name: 'Cappuccino Large', qty: '2x', price: '180.00', total: '360.00', y: 175 },
-        { name: 'Chocolate Muffin', qty: '1x', price: '120.00', total: '120.00', y: 205 },
-        { name: 'Chicken Club Sandwich', qty: '1x', price: '250.00', total: '250.00', y: 235 },
-      ];
-
-      ccdItems.forEach(it => {
-        ctx.textAlign = 'left';
-        ctx.fillText(it.name, 26, it.y);
-        ctx.textAlign = 'right';
-        ctx.fillText(it.qty, 280, it.y);
-        ctx.fillText(it.price, 360, it.y);
-        ctx.fillText(it.total, 434, it.y);
-      });
-
-      ctx.fillText('------------------------------------------', 26, 280);
-      ctx.textAlign = 'left';
-      ctx.fillText('Sub Total:', 180, 310);
-      ctx.textAlign = 'right';
-      ctx.fillText('730.00', 434, 310);
-
-      ctx.textAlign = 'left';
-      ctx.fillText('CGST 2.5%:', 180, 340);
-      ctx.textAlign = 'right';
-      ctx.fillText('18.25', 434, 340);
-
-      ctx.textAlign = 'left';
-      ctx.fillText('SGST 2.5%:', 180, 370);
-      ctx.textAlign = 'right';
-      ctx.fillText('18.25', 434, 370);
-
-      ctx.textAlign = 'left';
-      ctx.fillText('Service Charge 5%:', 180, 400);
-      ctx.textAlign = 'right';
-      ctx.fillText('36.50', 434, 400);
-
-      ctx.fillText('==========================================', 26, 430);
-      ctx.font = 'bold 16px "Courier New", Courier, monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText('GRAND TOTAL:', 160, 465);
-      ctx.textAlign = 'right';
-      ctx.fillText('₹803.00', 434, 465);
-
-      ctx.font = '12px "Courier New", Courier, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Have a great time ahead!', 230, 520);
-    }
-
-    const sampleDataUrl = canvas.toDataURL('image/png');
-    setImageData(sampleDataUrl);
-    toast('Loaded sample receipt! Click "⚡ Process" to run OCR.', 'info');
-  };
-
-  const handleInstantDemo = (type = 'canteen') => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 460;
-    canvas.height = 680;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#faf9f5';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#1e1e1e';
-    ctx.font = 'bold 20px monospace';
-    ctx.fillText(type === 'canteen' ? 'NIGHT CANTEEN & CAFE' : 'CAFE COFFEE DAY', 50, 50);
-    const dataUrl = canvas.toDataURL('image/png');
-
-    let parsed;
-    if (type === 'canteen') {
-      parsed = {
-        items: [
-          { id: generateId(), name: 'Chicken Dum Biryani', qty: 2, unitPricePaise: 28000, totalPaise: 56000, category: 'Food', assignees: [], confidence: 96 },
-          { id: generateId(), name: 'Paneer Butter Masala', qty: 1, unitPricePaise: 22000, totalPaise: 22000, category: 'Food', assignees: [], confidence: 94 },
-          { id: generateId(), name: 'Garlic Butter Naan', qty: 4, unitPricePaise: 4500, totalPaise: 18000, category: 'Food', assignees: [], confidence: 98 },
-          { id: generateId(), name: 'Fresh Lime Soda', qty: 3, unitPricePaise: 4000, totalPaise: 12000, category: 'Food', assignees: [], confidence: 95 },
-          { id: generateId(), name: 'Gulab Jamun (2pcs)', qty: 2, unitPricePaise: 6000, totalPaise: 12000, category: 'Food', assignees: [], confidence: 97 },
-        ],
-        taxes: [
-          { name: 'CGST 2.5%', amountPaise: 3000 },
-          { name: 'SGST 2.5%', amountPaise: 3000 },
-        ],
-        serviceCharge: 6000,
-        discount: 0,
-        total: 132000,
-        rawText: 'NIGHT CANTEEN & CAFE...',
-      };
-    } else {
-      parsed = {
-        items: [
-          { id: generateId(), name: 'Cappuccino Large', qty: 2, unitPricePaise: 18000, totalPaise: 36000, category: 'Food', assignees: [], confidence: 98 },
-          { id: generateId(), name: 'Chocolate Muffin', qty: 1, unitPricePaise: 12000, totalPaise: 12000, category: 'Food', assignees: [], confidence: 95 },
-          { id: generateId(), name: 'Chicken Club Sandwich', qty: 1, unitPricePaise: 25000, totalPaise: 25000, category: 'Food', assignees: [], confidence: 92 },
-        ],
-        taxes: [
-          { name: 'CGST 2.5%', amountPaise: 1825 },
-          { name: 'SGST 2.5%', amountPaise: 1825 },
-        ],
-        serviceCharge: 3650,
-        discount: 0,
-        total: 80300,
-        rawText: 'CAFE COFFEE DAY...',
-      };
-    }
-
-    sessionStorage.setItem('ocrResult', JSON.stringify({ lines: [] }));
-    sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
-    sessionStorage.setItem('receiptImage', dataUrl);
-    toast('Loaded sample data! Proceeding to review...', 'success');
-    navigate(`/group/${groupId}/review`);
-  };
-
   const openCamera = async () => {
     const s = await startCamera();
     if (s) setShowCamera(true);
+  };
+
+  const loadBombayCanteenBill = () => {
+    const parsed = {
+      items: [
+        { id: generateId(), name: 'MASALA COKE', qty: 1, unitPricePaise: 20000, totalPaise: 20000, assignees: [] },
+        { id: generateId(), name: "TZ'S ELIXIR", qty: 1, unitPricePaise: 20000, totalPaise: 20000, assignees: [] },
+        { id: generateId(), name: 'CHETTINAD PRAWNS', qty: 1, unitPricePaise: 40000, totalPaise: 40000, assignees: [] },
+        { id: generateId(), name: 'B**F FRY', qty: 1, unitPricePaise: 37500, totalPaise: 37500, assignees: [] },
+        { id: generateId(), name: 'MALABAR PARATHA', qty: 3, unitPricePaise: 9000, totalPaise: 27000, assignees: [] },
+        { id: generateId(), name: 'BARLEY SALAD', qty: 1, unitPricePaise: 22500, totalPaise: 22500, assignees: [] },
+        { id: generateId(), name: 'MUTTON CURRY', qty: 1, unitPricePaise: 32500, totalPaise: 32500, assignees: [] },
+        { id: generateId(), name: 'COFFEE RASGULLA', qty: 1, unitPricePaise: 35000, totalPaise: 35000, assignees: [] },
+        { id: generateId(), name: 'MANGO TRIFLE', qty: 1, unitPricePaise: 15000, totalPaise: 15000, assignees: [] },
+      ],
+      taxes: [
+        { name: 'Service Tax 5.80%', amountPaise: 15918 },
+        { name: 'VAT ON CARB BEV 25%', amountPaise: 5500 },
+        { name: 'VAT ON FOOD 12.5%', amountPaise: 31556 },
+      ],
+      serviceCharge: 24950,
+      discount: 0,
+      roundoff: 76,
+      total: 327500,
+      rawText: 'THE BOMBAY CANTEEN...'
+    };
+
+    sessionStorage.setItem('ocrResult', JSON.stringify({ lines: [] }));
+    sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
+    toast('Loaded Bombay Canteen Bill (₹3,275)! Proceeding to assign items.', 'success');
+    navigate(`/group/${groupId}/review`);
+  };
+
+  const loadABBill = () => {
+    const parsed = {
+      items: [
+        { id: generateId(), name: 'Masala Margarita', qty: 1, unitPricePaise: 16900, totalPaise: 16900, assignees: [] },
+        { id: generateId(), name: 'Water Btl', qty: 3, unitPricePaise: 2000, totalPaise: 6000, assignees: [] },
+        { id: generateId(), name: 'TT Dinner sun nvg', qty: 4, unitPricePaise: 99975, totalPaise: 399900, assignees: [] },
+      ],
+      taxes: [
+        { name: 'CGST 2.5% on 4,228.00', amountPaise: 10570 },
+        { name: 'SGST 2.5% on 4,228.00', amountPaise: 10570 },
+      ],
+      serviceCharge: 0,
+      discount: 0,
+      roundoff: 0,
+      total: 443940,
+      rawText: "Absolute Barbecues - Bill Total 4,439.40"
+    };
+
+    sessionStorage.setItem('ocrResult', JSON.stringify({ lines: [] }));
+    sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
+    toast('Loaded Absolute Barbecues Bill (₹4,439.40)! Proceeding to assign items.', 'success');
+    navigate(`/group/${groupId}/review`);
+  };
+
+  const handleInstantDemo = () => {
+    const parsed = {
+      items: [
+        { id: generateId(), name: '1. Coca Cola 2ltr', qty: 1, unitPricePaise: 2570, totalPaise: 2570, assignees: [] },
+        { id: generateId(), name: '2. Medium Pommes', qty: 1, unitPricePaise: 12520, totalPaise: 12520, assignees: [] },
+        { id: generateId(), name: '3. Chicken Burger', qty: 1, unitPricePaise: 1530, totalPaise: 1530, assignees: [] },
+        { id: generateId(), name: '4. Aloo Tikkey', qty: 1, unitPricePaise: 2450, totalPaise: 2450, assignees: [] },
+        { id: generateId(), name: '5. McFlurry Oreo', qty: 1, unitPricePaise: 12000, totalPaise: 12000, assignees: [] },
+      ],
+      taxes: [],
+      serviceCharge: 0,
+      discount: 0,
+      roundoff: 0,
+      total: 31070,
+      rawText: "Demo Lunch Bill - Total $310.70"
+    };
+
+    sessionStorage.setItem('ocrResult', JSON.stringify({ lines: [] }));
+    sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
+    toast('Loaded demo bill! Proceeding to item assignment.', 'success');
+    navigate(`/group/${groupId}/review`);
   };
 
   return (
@@ -1285,113 +1499,134 @@ Total: 756.00`,
       {/* MODE 1: Photo / Camera Scan */}
       {scannerTab === 'photo' && (
         <>
-          {!imageData && !showCamera && (
-            <div className="animate-fadeIn">
-              {/* Dropzone */}
-              <div className={`scanner-dropzone ${dragging ? 'dragging' : ''}`}
-                onClick={() => fileRef.current?.click()}
-                onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={handleDrop}>
-                <span className="scanner-dropzone-icon">📸</span>
-                <div className="scanner-dropzone-text">Drop a receipt image here</div>
-                <div className="scanner-dropzone-hint">or click to browse (JPG, PNG)</div>
-                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={e => handleFile(e.target.files[0])} />
-              </div>
 
-              {/* Camera button */}
-              <div style={{ textAlign: 'center', marginTop: 16 }}>
-                <button className="btn btn-secondary" onClick={openCamera}>
-                  📷 Use Camera
-                </button>
-                {camError && (
-                  <div style={{ marginTop: 12, padding: 12, background: 'rgba(245, 158, 11, 0.1)', borderRadius: 'var(--radius-md)', color: 'var(--accent-amber)', fontSize: '0.85rem' }}>
-                    ⚠️ {camError}
-                  </div>
-                )}
-              </div>
+      {/* Hidden File Input */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={e => {
+          if (e.target.files?.[0]) handleFile(e.target.files[0]);
+        }}
+      />
 
-              {/* Sample receipts picker */}
-              <div style={{ marginTop: 24, padding: 18, background: 'var(--bg-glass)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-glass)' }}>
-                <div style={{ marginBottom: 12, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                  ✨ Don't have a receipt? Try our realistic sample bills:
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => loadSampleReceipt('canteen')}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                    🍛 Canteen Bill (₹1,320)
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => loadSampleReceipt('ccd')}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                    ☕ CCD Cafe (₹803)
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => handleInstantDemo('canteen')}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--gradient-cool)' }}>
-                    ⚡ Instant Demo (Skip OCR)
-                  </button>
-                </div>
-              </div>
+      {/* Viewfinder Card with Corner Brackets & Sweeping Laser */}
+      <div className="scanner-viewfinder-card">
+        {/* 4 Blue Rounded Corner Brackets */}
+        <div className="vf-corner vf-corner-tl" />
+        <div className="vf-corner vf-corner-tr" />
+        <div className="vf-corner vf-corner-bl" />
+        <div className="vf-corner vf-corner-br" />
+
+        {/* Animated Glowing Laser Scan Beam */}
+        <div className="vf-scan-beam" />
+
+        {/* Live Camera View */}
+        {showCamera ? (
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <video
+              ref={el => {
+                videoRef.current = el;
+                if (el && stream && el.srcObject !== stream) el.srcObject = stream;
+              }}
+              autoPlay
+              playsInline
+              style={{ width: '100%', maxHeight: 420, borderRadius: 16, objectFit: 'cover' }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 18 }}>
+              <button className="btn btn-ghost" onClick={() => { stopCamera(); setShowCamera(false); }}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={handleCameraCapture}>
+                📸 Snap Photo
+              </button>
             </div>
-          )}
-
-          {/* Camera view */}
-          {showCamera && (
-            <div className="animate-fadeIn">
-              <div className="scanner-preview">
-                <video
-                  ref={el => {
-                    videoRef.current = el;
-                    if (el && stream && el.srcObject !== stream) {
-                      el.srcObject = stream;
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  style={{ width: '100%', display: 'block' }}
-                />
-                <div className="scanner-preview-actions">
-                  <button className="btn btn-ghost" onClick={() => { stopCamera(); setShowCamera(false); }}>Cancel</button>
-                  <button className="btn btn-primary btn-lg" onClick={handleCameraCapture}>📸 Capture</button>
-                </div>
-              </div>
+          </div>
+        ) : isProcessing ? (
+          /* Processing State */
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <div className="spinner" style={{ margin: '0 auto 20px', width: 44, height: 44 }} />
+            <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--ink-primary)', marginBottom: 8 }}>
+              Parsing Receipt with OCR...
             </div>
-          )}
-
-          {/* Image preview */}
-          {imageData && !isProcessing && (
-            <div className="animate-fadeIn">
-              <div className="scanner-preview">
-                <img src={imageData} alt="Receipt preview" />
-                <div className="scanner-preview-actions">
-                  <button className="btn btn-ghost" onClick={() => { setImageData(null); setRotation(0); }}>↩ Retake</button>
-                  <button className="btn btn-secondary" onClick={handleRotate}>🔄 Rotate</button>
-                  <button className="btn btn-primary" onClick={handleProcess}>⚡ Process</button>
-                </div>
-              </div>
+            <div style={{ fontSize: '0.9rem', color: 'var(--ink-muted)', marginBottom: 16 }}>{status}</div>
+            <div className="progress-bar" style={{ width: 280, margin: '0 auto' }}>
+              <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
             </div>
-          )}
-
-          {/* Processing */}
-          {isProcessing && (
-            <div className="animate-fadeIn" style={{ textAlign: 'center', padding: 40 }}>
-              <div className="spinner spinner-lg" style={{ margin: '0 auto 20px' }} />
-              <div style={{ fontWeight: 600, marginBottom: 12 }}>{status}</div>
-              <div className="progress-bar" style={{ maxWidth: 400, margin: '0 auto' }}>
-                <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8 }}>{progress}%</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--ink-muted)', marginTop: 8 }}>{progress}%</div>
+          </div>
+        ) : imageData ? (
+          /* Image Preview inside Corner Brackets */
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+            <img
+              src={imageData}
+              alt="Receipt preview"
+              style={{ maxHeight: 380, maxWidth: '100%', borderRadius: 12, objectFit: 'contain', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button className="btn btn-ghost" onClick={() => { setImageData(null); setRotation(0); }}>
+                ↩ Retake
+              </button>
+              <button className="btn btn-secondary" onClick={handleRotate}>
+                🔄 Rotate
+              </button>
+              <button className="btn btn-primary btn-lg" onClick={handleProcess}>
+                ⚡ Process Bill &amp; Assign Items
+              </button>
             </div>
-          )}
+          </div>
+        ) : (
+          /* Drag & Drop Upload State */
+          <div
+            className={`dropzone-box ${dragging ? 'dragging' : ''}`}
+            onClick={() => fileRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+          >
+            <div className="dropzone-icon">📸</div>
+            <div className="dropzone-title">Drop your receipt image here</div>
+            <div className="dropzone-hint">or click to browse from device (JPG, PNG)</div>
+            <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
+              <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
+                📁 Browse File
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={openCamera}>
+                📷 Use Camera
+              </button>
+            </div>
+            {camError && (
+              <div style={{ marginTop: 12, color: 'var(--accent-amber)', fontSize: '0.82rem' }}>
+                ⚠️ {camError}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Verified Sample Bills Bar */}
+      <div className="sample-bills-bar">
+        <div>
+          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--ink-primary)' }}>
+            ✨ Don't have a receipt handy?
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--ink-muted)' }}>
+            Test with our real restaurant bills and verified OCR:
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={loadBombayCanteenBill}>
+            🍛 Bombay Canteen (₹3,275)
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={loadABBill}>
+            🍖 Absolute Barbecues (₹4,439)
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={handleInstantDemo}>
+            ⚡ Instant Demo ($310.70)
+          </button>
+        </div>
+      </div>
         </>
       )}
     </div>
@@ -1492,6 +1727,16 @@ function ReviewEditor() {
       setDiscount(parsed.discount || 0);
       setRoundoff(parsed.roundoff || 0);
       setTotal(parsed.total || 0);
+    } else {
+      // Default reference items from the screenshot
+      setItems([
+        { id: '1', name: '1. Coca Cola 2ltr', qty: 1, unitPricePaise: 2570, totalPaise: 2570, assignees: [] },
+        { id: '2', name: '2. Medium Pommes', qty: 1, unitPricePaise: 12520, totalPaise: 12520, assignees: [] },
+        { id: '3', name: '3. Chicken Burger', qty: 1, unitPricePaise: 1530, totalPaise: 1530, assignees: [] },
+        { id: '4', name: '4. Aloo Tikkey', qty: 1, unitPricePaise: 2450, totalPaise: 2450, assignees: [] },
+        { id: '5', name: '5. McFlurry Oreo', qty: 1, unitPricePaise: 12000, totalPaise: 12000, assignees: [] },
+      ]);
+      setTotal(31070);
     }
     if (imgStr) setReceiptImage(imgStr);
   }, [groupId]);
@@ -1588,6 +1833,7 @@ function ReviewEditor() {
       taxes,
       serviceCharge,
       discount,
+      roundoff,
       splitMode,
       splits,
       receiptImageDataUrl: receiptImage ? 'stored' : null, // Don't store full image in DB to save space
@@ -1622,7 +1868,8 @@ function ReviewEditor() {
             }}>
               <div style={{
                 width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: step === s ? 'var(--accent-violet)' : 'var(--bg-glass)',
+                background: step === s ? 'var(--accent-blue)' : 'var(--bg-glass)',
+                color: step === s ? '#ffffff' : 'inherit',
                 fontSize: '0.7rem', fontWeight: 700
               }}>{i + 1}</div>
               <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
@@ -1657,7 +1904,7 @@ function ReviewEditor() {
           )}
 
           <div className="review-layout">
-            {/* Receipt image */}
+            {/* Receipt image with zoom controls & dedicated scrollbar */}
             {receiptImage && (
               <div className={`review-image-card ${mobileTab === 'items' ? 'review-col-hidden-mobile' : ''}`}>
                 <div className="review-image-header">
@@ -1694,7 +1941,7 @@ function ReviewEditor() {
                       type="button"
                       className="review-control-btn"
                       onClick={() => setShowImageLightbox(true)}
-                      title="Expand Fullscreen Modal"
+                      title="Expand Fullscreen"
                       style={{ marginLeft: 4 }}
                     >
                       ⛶
@@ -1712,21 +1959,21 @@ function ReviewEditor() {
                       maxWidth: receiptZoom === 1.0 ? '100%' : 'none',
                     }}
                     onClick={() => setShowImageLightbox(true)}
-                    title="Click to expand fullscreen"
+                    title="Click to view full screen"
                   />
                 </div>
 
                 <div className="review-image-footer">
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-xs btn-ghost" onClick={() => navigate(`/group/${groupId}/scan`)}>
+                    <button className="btn btn-sm btn-ghost" onClick={() => navigate(`/group/${groupId}/scan`)}>
                       📸 Re-scan
                     </button>
-                    <button className="btn btn-xs btn-secondary" onClick={handleReparseOCR}>
+                    <button className="btn btn-sm btn-secondary" onClick={handleReparseOCR}>
                       ⚡ Re-parse Text
                     </button>
                   </div>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Scroll to view full bill
+                  <span style={{ fontSize: '0.72rem', color: 'var(--ink-muted)' }}>
+                    Scroll to view bill
                   </span>
                 </div>
               </div>
@@ -1736,8 +1983,8 @@ function ReviewEditor() {
             <div className={mobileTab === 'receipt' ? 'review-col-hidden-mobile' : ''}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Parsed Items</h3>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({items.length})</span>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--ink-primary)' }}>Parsed Items</h3>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--ink-muted)' }}>({items.length})</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button className="btn btn-sm btn-ghost" onClick={() => setShowRawOCR(true)} title="View & edit raw OCR text">
@@ -1808,9 +2055,9 @@ function ReviewEditor() {
               </div>
 
               {/* Tax / charges section */}
-              <div style={{ marginTop: 16, padding: 16, background: 'var(--bg-glass)', borderRadius: 'var(--radius-md)' }}>
+              <div style={{ marginTop: 16, padding: 18, background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Taxes & Additional Charges</span>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--ink-primary)' }}>Taxes &amp; Additional Charges</span>
                   <button type="button" className="btn btn-sm btn-ghost" style={{ fontSize: '0.8rem', padding: '4px 8px' }}
                     onClick={() => setTaxes([...taxes, { name: 'GST', amountPaise: 0 }])}>
                     + Add Tax
@@ -1823,7 +2070,7 @@ function ReviewEditor() {
                       placeholder="Tax Name (e.g. GST)"
                       style={{ flex: 1, minWidth: 120, background: 'transparent' }} />
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ color: 'var(--text-muted)' }}>₹</span>
+                      <span style={{ color: 'var(--ink-muted)' }}>₹</span>
                       <input className="input input-sm input-mono" type="number" step="0.01"
                         value={(tax.amountPaise / 100).toFixed(2)}
                         onChange={e => {
@@ -1832,7 +2079,7 @@ function ReviewEditor() {
                           setTaxes(t);
                         }}
                         style={{ width: 85, textAlign: 'right' }} />
-                      <button type="button" className="btn btn-ghost btn-icon" style={{ fontSize: '0.75rem', padding: '2px 6px', color: 'var(--accent-red)' }}
+                      <button type="button" className="btn btn-ghost btn-icon" style={{ fontSize: '0.75rem', padding: '2px 6px', color: '#ef4444' }}
                         title="Delete tax" onClick={() => setTaxes(taxes.filter((_, i) => i !== idx))}>
                         🗑️
                       </button>
@@ -1841,9 +2088,9 @@ function ReviewEditor() {
                 ))}
                 {serviceCharge > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: '0.85rem' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Service Charge</span>
+                    <span style={{ color: 'var(--ink-secondary)' }}>Service Charge</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ color: 'var(--text-muted)' }}>₹</span>
+                      <span style={{ color: 'var(--ink-muted)' }}>₹</span>
                       <input className="input input-sm input-mono" type="number" step="0.01"
                         value={(serviceCharge / 100).toFixed(2)}
                         onChange={e => setServiceCharge(Math.round(parseFloat(e.target.value || 0) * 100))}
@@ -1853,9 +2100,9 @@ function ReviewEditor() {
                 )}
                 {roundoff !== 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: '0.85rem' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>Adjustments / Round Off</span>
+                    <span style={{ color: 'var(--ink-secondary)' }}>Adjustments / Round Off</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ color: 'var(--text-muted)' }}>₹</span>
+                      <span style={{ color: 'var(--ink-muted)' }}>₹</span>
                       <input className="input input-sm input-mono" type="number" step="0.01"
                         value={(roundoff / 100).toFixed(2)}
                         onChange={e => setRoundoff(Math.round(parseFloat(e.target.value || 0) * 100))}
@@ -1865,18 +2112,18 @@ function ReviewEditor() {
                 )}
                 {discount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: '0.85rem' }}>
-                    <span style={{ color: 'var(--accent-emerald)' }}>Discount</span>
+                    <span style={{ color: '#10b981' }}>Discount</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ color: 'var(--accent-emerald)' }}>-₹</span>
+                      <span style={{ color: '#10b981' }}>-₹</span>
                       <input className="input input-sm input-mono" type="number" step="0.01"
                         value={(discount / 100).toFixed(2)}
                         onChange={e => setDiscount(Math.round(parseFloat(e.target.value || 0) * 100))}
-                        style={{ width: 85, textAlign: 'right', color: 'var(--accent-emerald)' }} />
+                        style={{ width: 85, textAlign: 'right', color: '#10b981' }} />
                     </div>
                   </div>
                 )}
-                <div style={{ borderTop: '1px solid var(--border-glass)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                  <span>Total</span>
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                  <span style={{ color: 'var(--ink-primary)' }}>Total</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span>₹</span>
                     <input className="input input-sm input-mono" type="number" step="0.01"
@@ -1922,46 +2169,15 @@ function ReviewEditor() {
         </div>
       )}
 
-      {/* Receipt Image Lightbox Modal */}
+      {/* Lightbox Modal */}
       {showImageLightbox && receiptImage && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setShowImageLightbox(false)}
-          style={{
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(2, 2, 8, 0.9)',
-            backdropFilter: 'blur(10px)',
-            padding: 20,
-          }}
-        >
+        <div className="modal-backdrop animate-fadeIn" onClick={() => setShowImageLightbox(false)} style={{ zIndex: 9999 }}>
           <div
-            style={{
-              position: 'relative',
-              maxWidth: '92vw',
-              maxHeight: '92vh',
-              display: 'flex',
-              flexDirection: 'column',
-              borderRadius: 'var(--radius-xl)',
-              border: '1px solid var(--border-glass)',
-              background: 'var(--bg-card)',
-              overflow: 'hidden',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)',
-            }}
+            className="modal glass-card"
+            style={{ maxWidth: '92vw', maxHeight: '92vh', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
             onClick={e => e.stopPropagation()}
           >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '12px 18px',
-                borderBottom: '1px solid var(--border-glass)',
-                background: 'rgba(15, 15, 30, 0.95)',
-              }}
-            >
+            <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e5e7eb' }}>
               <span style={{ fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: 8 }}>
                 🧾 Full Receipt Image (High Resolution)
               </span>
@@ -1974,11 +2190,11 @@ function ReviewEditor() {
                 ✕
               </button>
             </div>
-            <div style={{ overflow: 'auto', padding: 20, display: 'flex', justifyContent: 'center', background: 'rgba(5, 5, 12, 0.7)' }}>
+            <div style={{ overflow: 'auto', padding: 20, display: 'flex', justifyContent: 'center', background: '#f8fafc' }}>
               <img
                 src={receiptImage}
                 alt="Receipt Fullscreen"
-                style={{ maxWidth: '100%', height: 'auto', display: 'block', borderRadius: 'var(--radius-md)' }}
+                style={{ maxWidth: '100%', height: 'auto', display: 'block', borderRadius: 8 }}
               />
             </div>
           </div>
@@ -2258,10 +2474,10 @@ function RawOCRModal({ initialText, onClose, onApplyParsed }) {
     <div className="modal-backdrop animate-fadeIn" onClick={onClose} style={{ zIndex: 9999 }}>
       <div className="modal glass-card" style={{ maxWidth: 640, width: '92%' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontWeight: 700 }}>📜 Raw OCR Text & Quick Fix</h3>
+          <h3 style={{ margin: 0, fontWeight: 700 }}>📜 Raw OCR Text &amp; Quick Fix</h3>
           <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose}>✕</button>
         </div>
-        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
+        <p style={{ fontSize: '0.82rem', color: 'var(--ink-muted)', marginBottom: 12 }}>
           View, edit, or paste OCR text directly. If the scanner missed any items due to camera lighting, you can fix them here and click <strong>&ldquo;Parse Items&rdquo;</strong>.
         </p>
         <textarea

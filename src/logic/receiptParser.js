@@ -53,7 +53,7 @@ const ROUNDOFF_KEYWORDS = /\b(round\s*off|rounding|adj\.?|adjustments?)\b/i;
 const TABLE_HEADER_REGEX = /(?:^(?:qty|quantity|s\.?no|#)?\s*(?:item|items|description|desc|particulars)\s*(?:qty|quantity)?\s*(?:rate|price|unit\s*price)?\s*(?:amount|total|net|val)?$|\b(?:item|items|description|desc|particulars)\b.*\b(?:qty|quantity|rate|price|amount|total|val)\b)/i;
 
 // Universal Noise Patterns: addresses, postal pincodes, store metadata, phone numbers, POS terminals, payment tenders
-const NOISE_KEYWORDS = /\b(pvt|ltd|limited|corporate|park|road|street|marg|vihar|nagar|floor|complex|bldg|building|tower|mall|plaza|avenue|lane|highway|sector|phase|block|opp\.?|near\b|mumbai|delhi|bangalore|bengaluru|hyderabad|chennai|pune|kolkata|ahmedabad|maharashtra|karnataka|gujarat|india|pincode|pin\s*code|pin\s*-\s*\d|[1-9]\d{5}\b|draft\b|invoice\b|bill\s*n[ou]|order\b|order\s*type|token\b|covers?\b|shift\b|pax\b|cashier\b|server\b|waiter\b|captain\b|steward\b|host\b|hostess\b|guest\b|counter\b|outlet\b|branch\b|station\b|terminal\b|table\b|foodandbeverages|f\s*&\s*b|gstin|fssai|tin\s*n[ou]|cin\b|pan\b|s\.?t\.?\s*n[ou]|vat\s*no|vat\s*reg|hsn\b|sac\b|address|phone|tel|mob|fax|email|thank|welcome|visit|www\.|\.com|\.in|duplicate|original|reprint|e\s*&\s*o\.?e|customer\s*copy|merchant\s*copy|have\s*a\s*nice|come\s*again|feedback|rate\s*us|scan\s*to|upi|paytm|gpay|phonepe|visa\b|mastercard\b|amex\b|rupay\b|card\s*ending|chip\s*read|swipe|auth\s*code|appr\s*code|rrn\b|aid\b|mid\b|tid\b|batch\b|trace\b|txn\b|kpt\b|kot\b|dine\s*in|take\s*away|parcel|delivery|wi-?fi\b|password\b|goods\s*once\s*sold|subject\s*to|jurisdiction)\b/i;
+const NOISE_KEYWORDS = /\b(pvt|ltd|limited|corporate|park|road|street|marg|vihar|nagar|floor|complex|bldg|building|tower|mall|plaza|avenue|lane|highway|sector|phase|block|opp\.?|near\b|mumbai|delhi|bangalore|bengaluru|hyderabad|chennai|pune|kolkata|ahmedabad|maharashtra|karnataka|gujarat|india|pincode|pin\s*code|pin\s*-\s*\d|[1-9]\d{5}\b|draft\b|invoice\b|bill\s*n[ou]|order\s*#|order\s*n[ou]|token\b|covers?\b|shift\b|pax\b|cashier\b|server\b|waiter\b|captain\b|steward\b|host\b|hostess\b|guest\b|counter\b|outlet\b|branch\b|station\b|terminal\b|table\b|foodandbeverages|f\s*&\s*b|gstin|fssai|tin\s*n[ou]|cin\b|pan\b|s\.?t\.?\s*n[ou]|vat\s*no|vat\s*reg|hsn\b|sac\b|address|phone|tel|mob|fax|email|thank|welcome|visit|www\.|\.com|\.in|duplicate|original|reprint|e\s*&\s*o\.?e|customer\s*copy|merchant\s*copy|have\s*a\s*nice|come\s*again|feedback|rate\s*us|scan\s*to|upi|paytm|gpay|phonepe|visa\b|mastercard\b|amex\b|rupay\b|card\s*ending|chip\s*read|swipe|auth\s*code|appr\s*code|rrn\b|aid\b|mid\b|tid\b|batch\b|trace\b|txn\b|kpt\b|kot\b|dine\s*in|take\s*away|parcel|delivery|wi-?fi\s*(?:pass|key|network|code)|free\s*wi-?fi|password\b|goods\s*once\s*sold|subject\s*to|jurisdiction)\b/i;
 
 // Matches random alphanumeric codes, hashes, serial numbers, barcodes (10-18 digits), or multi-part reference codes
 const RANDOM_CODE_REGEX = /\b(?:(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{6,}|[A-Z0-9]{2,}[-#/][A-Z0-9]{2,}[-#/][A-Z0-9]{2,}|\d{10,18})\b/i;
@@ -123,15 +123,18 @@ export function parseReceipt(ocrResult) {
     }
   }
 
-  // Find bodyStartIndex (table header, dashed separator, or after header metadata)
+  // Find bodyStartIndex: Skip lines until table header or dashed separator,
+  // or skip initial consecutive header metadata lines BEFORE any line item.
+  let foundFirstItemOrPrice = false;
   for (let i = 0; i < summaryStartIndex; i++) {
     const text = (lines[i].text || '').trim();
     if (TABLE_HEADER_REGEX.test(text) || /^[-=_.]{4,}$/.test(text)) {
       bodyStartIndex = i + 1;
-    } else if (NOISE_KEYWORDS.test(text) || DATE_TIME_REGEX.test(text) || RANDOM_CODE_REGEX.test(text)) {
-      if (i >= bodyStartIndex && i < summaryStartIndex - 1) {
-        bodyStartIndex = i + 1;
-      }
+      foundFirstItemOrPrice = false;
+    } else if (!foundFirstItemOrPrice && (NOISE_KEYWORDS.test(text) || DATE_TIME_REGEX.test(text) || RANDOM_CODE_REGEX.test(text))) {
+      bodyStartIndex = i + 1;
+    } else if (PRICE_REGEX.test(text)) {
+      foundFirstItemOrPrice = true;
     }
   }
 
@@ -393,6 +396,17 @@ function parseLineItem(text, ocrLine) {
         nameText = nameText.replace(QTY_REGEX, ' ').trim();
       } else {
         qty = 1;
+      }
+    } else {
+      // Pattern C: Trailing standalone quantity column e.g. "Paneer Tikka 1", "Butter Garlic Naan 2"
+      const trailingQtyMatch = nameText.match(/\s+(\d{1,2})$/);
+      if (trailingQtyMatch) {
+        const q = parseInt(trailingQtyMatch[1], 10);
+        if (q > 0 && q < 50) {
+          qty = q;
+          unitPricePaise = Math.round(totalPaise / qty);
+          nameText = nameText.substring(0, trailingQtyMatch.index).trim();
+        }
       }
     }
   }

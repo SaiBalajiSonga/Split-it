@@ -46,15 +46,16 @@ const KEYWORD_TAXONOMY = {
   Travel: [
     'uber', 'ola', 'cab', 'taxi', 'auto', 'fare', 'toll', 'parking', 'fuel',
     'petrol', 'diesel', 'cng', 'flight', 'airline', 'train', 'metro', 'bus',
-    'ticket', 'trip', 'fastag',
+    'fastag', 'transit',
   ],
   Utilities: [
     'wifi', 'wi-fi', 'internet', 'broadband', 'recharge', 'mobile', 'electricity',
     'power', 'water bill', 'maintenance', 'rent', 'lpg', 'gas cylinder', 'pipe',
   ],
   Entertainment: [
-    'movie', 'cinema', 'theatre', 'imax', 'pvr', 'inox', 'netflix', 'prime',
+    'movie', 'cinema', 'theatre', 'theater', 'imax', 'pvr', 'inox', 'netflix', 'prime',
     'spotify', 'game', 'gaming', 'bowling', 'concert', 'show', 'amusement', 'party',
+    'ticket', 'tickets',
   ],
 };
 
