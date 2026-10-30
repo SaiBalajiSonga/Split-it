@@ -146,7 +146,7 @@ export function useOCR() {
       setStatus('Processing receipt...');
       setProgress(30);
 
-      const result = await worker.recognize(imageSource);
+      const result = await worker.recognize(imageSource, {}, { blocks: true });
       setProgress(95);
       setStatus('Parsing results...');
 

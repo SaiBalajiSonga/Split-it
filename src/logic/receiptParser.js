@@ -35,8 +35,8 @@ const TAX_KEYWORDS = /\b(c\.?g\.?s\.?t|s\.?g\.?s\.?t|i\.?g\.?s\.?t|g\.?s\.?t|tax
 // Service charge
 const SERVICE_CHARGE_KEYWORDS = /\b(service\s*charge|s\.?\s*charge|service\s*tax|svc\s*chg)\b/i;
 
-// Total keywords
-const TOTAL_KEYWORDS = /\b(grand\s*total|total\s*amount|net\s*total|amount\s*due|bill\s*amount|total\s*payable|amount\s*payable|net\s*payable|total)\b/i;
+// Total keywords - including gross amount and final total
+const TOTAL_KEYWORDS = /\b(grand\s*total|gross\s*amount|gross\s*total|total\s*amount|net\s*total|amount\s*due|bill\s*amount|total\s*payable|amount\s*payable|net\s*payable|balance\s*due|final\s*total|total)\b/i;
 
 // Subtotal keywords
 const SUBTOTAL_KEYWORDS = /\b(sub\s*-?\s*total|item\s*total|food\s*total|items?\s*sub\s*total)\b/i;
@@ -44,11 +44,14 @@ const SUBTOTAL_KEYWORDS = /\b(sub\s*-?\s*total|item\s*total|food\s*total|items?\
 // Discount keywords
 const DISCOUNT_KEYWORDS = /\b(discount|disc\.?|off|savings|offer|promo|coupon)\b/i;
 
-// Round off
-const ROUNDOFF_KEYWORDS = /\b(round\s*off|rounding|adj\.?|adjustment)\b/i;
+// Round off & adjustments
+const ROUNDOFF_KEYWORDS = /\b(round\s*off|rounding|adj\.?|adjustments?)\b/i;
+
+// Table header keywords to skip
+const TABLE_HEADER_REGEX = /^(?:qty|quantity|s\.?no|#)?\s*(?:item|items|description|desc|particulars)\s*(?:qty|quantity)?\s*(?:rate|price|unit\s*price)?\s*(?:amount|total|net|val)?$/i;
 
 // Noise patterns — lines to skip
-const NOISE_KEYWORDS = /\b(gstin|gst\s*n[ou]|fssai|tin\s*n[ou]|cin|pan|address|phone|tel|mob|fax|email|thank|welcome|visit|www\.|\.com|\.in|invoice\s*n[ou]|bill\s*n[ou]|order\s*n[ou]|token|table\s*n[ou]|cashier|server|waiter|captain|date|time|print|duplicate|original|e\s*&\s*o\.?e|subject\s*to|jurisdiction|customer\s*copy|have\s*a\s*nice|come\s*again|feedback|rate\s*us|scan\s*to|upi|paytm|gpay|powered\s*by)\b/i;
+const NOISE_KEYWORDS = /\b(gstin|gst\s*n[ou]|fssai|tin\s*n[ou]|s\.?t\.?\s*n[ou]|vat\s*n[ou]|vat\s*no|vat\s*reg|cin|pan|address|phone|tel|mob|fax|email|thank|welcome|visit|www\.|\.com|\.in|invoice\s*n[ou]|bill\s*n[ou]|order\s*n[ou]|token|table\s*n[ou]|covers|shift|cashier|server|waiter|captain|date|time|print|duplicate|original|reprint|e\s*&\s*o\.?e|subject\s*to|jurisdiction|customer\s*copy|have\s*a\s*nice|come\s*again|feedback|rate\s*us|scan\s*to|upi|paytm|gpay|powered\s*by)\b/i;
 
 // Lines that are just numbers/dates
 const JUST_NUMBERS = /^\s*[\d\s/\-.:,]+\s*$/;
@@ -57,11 +60,29 @@ const JUST_DASHES = /^[\s\-=_*#.]+$/;
 
 /**
  * Parse raw OCR output into structured receipt data.
- * @param {Object} ocrResult — Tesseract.js recognition result
+ * @param {Object|string} ocrResult — Tesseract.js recognition result or text string
  * @returns {Object} { items, subtotal, taxes, serviceCharge, discount, total, rawText }
  */
 export function parseReceipt(ocrResult) {
-  const lines = ocrResult.lines || [];
+  let lines = [];
+  if (Array.isArray(ocrResult?.lines) && ocrResult.lines.length > 0) {
+    lines = ocrResult.lines;
+  } else if (ocrResult?.blocks && Array.isArray(ocrResult.blocks)) {
+    lines = ocrResult.blocks.flatMap(b => (b.paragraphs || []).flatMap(p => p.lines || []));
+  }
+
+  // Universal text fallback: split text by newline
+  const rawText = typeof ocrResult === 'string'
+    ? ocrResult
+    : (ocrResult?.text || (Array.isArray(ocrResult) ? ocrResult.join('\n') : ''));
+
+  if (lines.length === 0 && rawText) {
+    lines = rawText
+      .split(/\r?\n/)
+      .map(t => ({ text: t.trim(), words: [] }))
+      .filter(l => l.text.length > 0);
+  }
+
   const items = [];
   const taxes = [];
   let subtotal = null;
@@ -78,6 +99,9 @@ export function parseReceipt(ocrResult) {
     
     // Skip lines that are just numbers/dates/dashes
     if (JUST_NUMBERS.test(text) || JUST_DASHES.test(text)) continue;
+
+    // Skip table header lines like "QTY DESCRIPTION AMOUNT"
+    if (TABLE_HEADER_REGEX.test(text)) continue;
 
     // Skip noise lines
     if (NOISE_KEYWORDS.test(text) && !TOTAL_KEYWORDS.test(text)) continue;
@@ -130,7 +154,7 @@ export function parseReceipt(ocrResult) {
       continue;
     }
 
-    // Check for round-off (skip)
+    // Check for round-off & adjustments (skip)
     if (ROUNDOFF_KEYWORDS.test(text)) continue;
 
     // Try to parse as a line item
@@ -156,7 +180,7 @@ export function parseReceipt(ocrResult) {
     serviceCharge,
     discount,
     total,
-    rawText: ocrResult.text || '',
+    rawText,
   };
 }
 
@@ -208,23 +232,35 @@ function parseLineItem(text, ocrLine) {
   // Try to find quantity
   let qty = 1;
   let unitPricePaise = totalPaise;
-  const qtyMatch = nameText.match(QTY_REGEX);
-  if (qtyMatch) {
-    qty = parseInt(qtyMatch[1] || qtyMatch[2] || qtyMatch[3], 10);
-    if (qty > 0 && qty < 100) { // Sanity check
+
+  // Pattern A: Leading quantity e.g. "1 MASALA COKE", "3 MALABAR PARATHA"
+  const leadingQtyMatch = nameText.match(/^(\d{1,3})\s+(?=[A-Za-z])/);
+  if (leadingQtyMatch) {
+    const q = parseInt(leadingQtyMatch[1], 10);
+    if (q > 0 && q < 100) {
+      qty = q;
       unitPricePaise = Math.round(totalPaise / qty);
-      // Remove qty from name
-      nameText = nameText.replace(QTY_REGEX, ' ').trim();
-    } else {
-      qty = 1;
+      nameText = nameText.substring(leadingQtyMatch[0].length).trim();
+    }
+  } else {
+    // Pattern B: Trailing or inline quantity e.g. "Naan 2x", "Coke x2", "Qty: 2"
+    const qtyMatch = nameText.match(QTY_REGEX);
+    if (qtyMatch) {
+      qty = parseInt(qtyMatch[1] || qtyMatch[2] || qtyMatch[3], 10);
+      if (qty > 0 && qty < 100) {
+        unitPricePaise = Math.round(totalPaise / qty);
+        nameText = nameText.replace(QTY_REGEX, ' ').trim();
+      } else {
+        qty = 1;
+      }
     }
   }
 
   let name = cleanItemName(nameText);
 
-  // Skip if name is empty or too short or looks like a total
+  // Skip if name is empty or too short or looks like a total/header
   if (!name || name.length < 2) return null;
-  if (TOTAL_KEYWORDS.test(name) || TAX_KEYWORDS.test(name)) return null;
+  if (TOTAL_KEYWORDS.test(name) || TAX_KEYWORDS.test(name) || TABLE_HEADER_REGEX.test(name)) return null;
 
   return {
     id: generateId(),
@@ -244,7 +280,7 @@ function parseLineItem(text, ocrLine) {
 function cleanItemName(name) {
   if (!name) return '';
   return name
-    .replace(/^[\d\s.\-#)]+/, '')  // Leading numbers, dots, hashes
+    .replace(/^[\s.\-#)]+/, '')  // Leading punctuation, dots, hashes, brackets (keep alphanumeric)
     .replace(/\s{2,}/g, ' ')        // Multiple spaces
     .replace(/[|\\]/g, '')          // OCR artifacts
     .trim();

@@ -924,11 +924,15 @@ function ReceiptScanner() {
       // Parse the OCR result
       const parsed = parseReceipt(ocrResult);
       
-      // Navigate to review page with data
-      // Store in sessionStorage since it's temporary
-      sessionStorage.setItem('ocrResult', JSON.stringify(ocrResult));
-      sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
-      sessionStorage.setItem('receiptImage', imageData);
+      // Store in sessionStorage safely (lightweight ocrResult to avoid storage quota limit)
+      try {
+        sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
+        sessionStorage.setItem('receiptImage', processed || imageData);
+        sessionStorage.setItem('ocrResult', JSON.stringify({ text: ocrResult?.text || '' }));
+      } catch {
+        // Fallback if image data exceeds storage quota
+        sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
+      }
       
       navigate(`/group/${groupId}/review`);
     } catch (err) {
@@ -1292,11 +1296,29 @@ function ReviewEditor() {
 
     // Load parsed data from sessionStorage
     const parsedStr = sessionStorage.getItem('parsedReceipt');
+    const ocrStr = sessionStorage.getItem('ocrResult');
     const imgStr = sessionStorage.getItem('receiptImage');
 
     if (parsedStr) {
-      const parsed = JSON.parse(parsedStr);
-      setItems(parsed.items || []);
+      let parsed = JSON.parse(parsedStr);
+      let loadedItems = parsed.items || [];
+
+      // Auto re-parse if previous parse produced 0 items
+      if (loadedItems.length === 0 && ocrStr) {
+        try {
+          const rawOcr = JSON.parse(ocrStr);
+          const reParsed = parseReceipt(rawOcr);
+          if (reParsed.items && reParsed.items.length > 0) {
+            loadedItems = reParsed.items;
+            parsed.taxes = reParsed.taxes || [];
+            parsed.serviceCharge = reParsed.serviceCharge || 0;
+            parsed.discount = reParsed.discount || 0;
+            parsed.total = reParsed.total || 0;
+          }
+        } catch { /* ignore fallback error */ }
+      }
+
+      setItems(loadedItems);
       setTaxes(parsed.taxes || []);
       setServiceCharge(parsed.serviceCharge || 0);
       setDiscount(parsed.discount || 0);

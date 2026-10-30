@@ -130,6 +130,52 @@ assert(parsed.total === 80300, `Grand total = 80300 paise (got ${parsed.total})`
 assert(parsed.taxes.length === 2, `Detected 2 tax lines (CGST & SGST) (got ${parsed.taxes.length})`);
 assert(parsed.serviceCharge === 3650, `Detected service charge 36.50 -> 3650 paise (got ${parsed.serviceCharge})`);
 
+// --- Test 7: Real-world Bombay Canteen Receipt (Raw Text from Tesseract) ---
+console.log('\n[7] Real-world Restaurant Receipt (The Bombay Canteen):');
+const bombayText = `
+***REPRINT***
+Tel /02249666666
+THE BOMBAY CANTEEN
+INDIAN CAFE & BAR
+Facebook /thebombaycanteen
+Twitter /bombay_canteen
+Instagram /thebombaycanteen
+BILL NO : 00047224 TABLE : 20
+BILL DATE : 21/05/2016 COVERS: 2
+BILL TIME : 15:49 SHIFT : 1
+QTY DESCRIPTION AMOUNT
+1 MASALA COKE 200.00
+1 TZ'S ELIXIR 200.00
+1 CHETTINAD PRAWNS ALI-YOL 400.00
+1 B**F FRY 375.00
+3 MALABAR PARATHA 270.00
+1 BARLEY SALAD 225.00
+1 MUTTON CURRY 325.00
+1 COFFEE RASGULLA 350.00
+1 MANGO TRIFLE (SINGLE) 150.00
+Sub Total 2495.00
+Service Charge 10% 249.50
+Service Tax 5.80% 159.18
+VAT ON CARB BEV 25% 55.00
+VAT ON FOOD 12.5% 315.56
+Adjustments 0.76
+Gross Amount 3275.00
+VAT NO: 27965280003V
+S.T.NO: AADCH3020RSD001
+CHINTU, CHHOTA AND BADA
+SAY THANK YOU AND HOPE
+THAT YOU COME BACK SOON!
+`;
+
+const parsedBombay = parseReceipt({ text: bombayText });
+assert(parsedBombay.items.length === 9, `Detected all 9 food/beverage items (got ${parsedBombay.items.length})`);
+assert(parsedBombay.items[0].name === 'MASALA COKE', 'Detected MASALA COKE');
+assert(parsedBombay.items[4].name === 'MALABAR PARATHA' && parsedBombay.items[4].qty === 3, 'Detected 3x MALABAR PARATHA with qty 3');
+assert(parsedBombay.items[4].unitPricePaise === 9000, 'MALABAR PARATHA unit price = ₹90.00 (9000 paise)');
+assert(parsedBombay.subtotal === 249500, `Subtotal = ₹2,495.00 (got ${parsedBombay.subtotal})`);
+assert(parsedBombay.serviceCharge === 24950, `Service Charge = ₹249.50 (got ${parsedBombay.serviceCharge})`);
+assert(parsedBombay.total === 327500, `Gross Total = ₹3,275.00 (got ${parsedBombay.total})`);
+
 console.log(`\n========================================`);
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
 console.log(`========================================\n`);
