@@ -179,14 +179,14 @@ export async function saveSettlements(groupId, transactions) {
   // Save new settlements
   for (const t of transactions) {
     await tx.store.put({
-      id: generateId(),
+      id: t.id || generateId(),
       groupId,
-      fromId: t.from,
-      toId: t.to,
+      fromId: t.from || t.fromId,
+      toId: t.to || t.toId,
       amountPaise: t.amountPaise,
-      settled: false,
-      settledAt: null,
-      createdAt: Date.now(),
+      settled: Boolean(t.settled),
+      settledAt: t.settled ? (t.settledAt || Date.now()) : null,
+      createdAt: t.createdAt || Date.now(),
       updatedAt: Date.now(),
     });
   }

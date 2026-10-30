@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { HashRouter, Routes, Route, useNavigate, useParams, Link } from 'react-router-dom';
+import QRCode from 'qrcode';
 import { ToastProvider, useToast, useGroups, useExpenses, useOCR, useCamera } from './hooks/useAppHooks';
 import { parseReceipt, validateTotal, formatRupees } from './logic/receiptParser';
 import { calculateItemizedSplit, calculateEqualSplit, calculatePercentageSplit, calculateSharesSplit, computeNetBalances } from './logic/splitEngine';
@@ -200,6 +201,16 @@ function CreateGroupModal({ onClose, onCreate }) {
     setMembers(members.filter(m => m.id !== id));
   };
 
+  const loadSampleWing = () => {
+    setName('Wing 4 Canteen Gang');
+    setMembers([
+      { id: generateId(), name: 'Aarav Sharma', color: getMemberColor(0), upi: 'aarav@okhdfcbank' },
+      { id: generateId(), name: 'Priya Nair', color: getMemberColor(1), upi: 'priya@oksbi' },
+      { id: generateId(), name: 'Rohan Verma', color: getMemberColor(2), upi: 'rohan@paytm' },
+      { id: generateId(), name: 'Sneha Patel', color: getMemberColor(3), upi: 'sneha@okicici' },
+    ]);
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -208,6 +219,15 @@ function CreateGroupModal({ onClose, onCreate }) {
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              onClick={loadSampleWing}
+              style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)' }}>
+              ✨ Fill Sample Hostel Wing
+            </button>
+          </div>
           <div>
             <label className="label">Group Name</label>
             <input className="input" placeholder="e.g., Night Canteen Gang" value={name}
@@ -501,11 +521,146 @@ function BalancesTab({ expenses, members }) {
   );
 }
 
+// ===== UPI PAYMENT & QR MODAL =====
+function UPIPaymentModal({ tx, group, onClose, onSettled }) {
+  const { from, to, amountPaise, settled } = tx;
+  const [upiId, setUpiId] = useState(to?.upi || `${to?.name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@okaxis`);
+  const [qrUrl, setQrUrl] = useState('');
+  const toast = useToast();
+
+  const upiLink = generateUPILink({
+    payeeUPI: upiId,
+    payeeName: to?.name || '',
+    amount: amountPaise,
+    note: `SplitSmart - ${group?.name || 'Bill Settlement'}`,
+  });
+
+  useEffect(() => {
+    QRCode.toDataURL(upiLink, {
+      width: 240,
+      margin: 1,
+      color: { dark: '#06060f', light: '#ffffff' },
+    }).then(setQrUrl).catch(err => console.error('QR generation failed:', err));
+  }, [upiLink]);
+
+  const copyToClipboard = (text, msg) => {
+    navigator.clipboard?.writeText(text).then(() => {
+      toast(msg, 'success');
+    }).catch(() => {
+      toast('Failed to copy', 'error');
+    });
+  };
+
+  const suffixes = ['@okhdfcbank', '@oksbi', '@paytm', '@ybl', '@okaxis'];
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, textAlign: 'center' }}>
+        <div className="modal-header">
+          <h2 className="modal-title" style={{ fontSize: '1.1rem' }}>📱 UPI Payment & QR</h2>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          {/* Transfer direction */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+            <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{from?.name}</span>
+            <span style={{ color: 'var(--accent-cyan)' }}>→ pays →</span>
+            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{to?.name}</span>
+          </div>
+
+          {/* Amount banner */}
+          <div style={{
+            fontSize: '1.9rem',
+            fontWeight: 800,
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--accent-emerald)',
+            letterSpacing: '-0.5px'
+          }}>
+            {formatCurrency(amountPaise)}
+          </div>
+
+          {/* Scannable QR Code */}
+          <div className="qr-container" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.5)', borderRadius: 16, padding: 12 }}>
+            {qrUrl ? (
+              <img src={qrUrl} alt="UPI QR Code" style={{ width: 220, height: 220, display: 'block' }} />
+            ) : (
+              <div style={{ width: 220, height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}>
+                Generating QR...
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            Scan with any UPI app (GPay, PhonePe, Paytm, BHIM)
+          </div>
+
+          {/* Payee UPI ID */}
+          <div style={{ width: '100%', textAlign: 'left', marginTop: 4 }}>
+            <label className="label" style={{ fontSize: '0.75rem' }}>Payee UPI ID</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                className="input input-mono input-sm"
+                value={upiId}
+                onChange={e => setUpiId(e.target.value)}
+                placeholder="payee@bank"
+                style={{ flex: 1 }}
+              />
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => copyToClipboard(upiId, 'UPI ID copied!')}
+                title="Copy UPI ID">
+                📋
+              </button>
+            </div>
+            {/* Quick suffix chips */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+              {suffixes.map(sfx => (
+                <button
+                  key={sfx}
+                  type="button"
+                  className="badge badge-glass"
+                  style={{ cursor: 'pointer', fontSize: '0.65rem' }}
+                  onClick={() => {
+                    const prefix = upiId.split('@')[0] || to?.name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee';
+                    setUpiId(prefix + sfx);
+                  }}>
+                  {sfx}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="modal-footer" style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button
+            className="btn btn-ghost"
+            style={{ flex: 1 }}
+            onClick={() => copyToClipboard(upiLink, 'UPI Deep Link copied!')}>
+            📋 Copy Link
+          </button>
+          <a
+            href={upiLink}
+            className="btn btn-secondary"
+            style={{ flex: 1, textAlign: 'center' }}>
+            ⚡ Open App
+          </a>
+          <button
+            className="btn btn-success"
+            style={{ flex: 1 }}
+            onClick={onSettled}>
+            {settled ? 'Undo Settle' : '✓ Mark Settled'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===== SETTLE TAB =====
 function SettleTab({ expenses, members, groupId, group }) {
   const balances = computeNetBalances(expenses, members);
   const transactions = simplifyDebts(balances);
   const [settlements, setSettlements] = useState([]);
+  const [selectedTx, setSelectedTx] = useState(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -579,15 +734,30 @@ function SettleTab({ expenses, members, groupId, group }) {
                     onClick={() => toggleSettle(i)}>
                     {settled ? '↩ Undo' : '✓ Settle'}
                   </button>
-                  <a href={upiLink} className="btn btn-sm btn-secondary" title="Pay via UPI">
-                    💳 UPI
-                  </a>
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => setSelectedTx({ ...tx, index: i, from, to, settled })}
+                    title="Pay via UPI or scan QR">
+                    📱 QR / Pay
+                  </button>
                 </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {selectedTx && (
+        <UPIPaymentModal
+          tx={selectedTx}
+          group={group}
+          onClose={() => setSelectedTx(null)}
+          onSettled={() => {
+            toggleSettle(selectedTx.index);
+            setSelectedTx(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -770,6 +940,210 @@ function ReceiptScanner() {
     }
   };
 
+  const loadSampleReceipt = (type = 'canteen') => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 460;
+    canvas.height = 680;
+    const ctx = canvas.getContext('2d');
+
+    // Background paper
+    ctx.fillStyle = '#faf9f5';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Receipt border
+    ctx.strokeStyle = '#d6d3cb';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+
+    ctx.fillStyle = '#1e1e1e';
+    ctx.textAlign = 'center';
+
+    if (type === 'canteen') {
+      ctx.font = 'bold 20px "Courier New", Courier, monospace';
+      ctx.fillText('NIGHT CANTEEN & CAFE', 230, 48);
+      ctx.font = '12px "Courier New", Courier, monospace';
+      ctx.fillText('Hostel Wing 4, Campus Grounds', 230, 70);
+      ctx.fillText('GSTIN: 29AABCU9603R1ZM | Order #4082', 230, 88);
+      ctx.fillText('------------------------------------------', 230, 108);
+
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 13px "Courier New", Courier, monospace';
+      ctx.fillText('ITEM                   QTY    PRICE   TOTAL', 26, 132);
+      ctx.font = '13px "Courier New", Courier, monospace';
+      ctx.fillText('------------------------------------------', 26, 146);
+
+      const sampleItems = [
+        { name: 'Chicken Dum Biryani', qty: '2x', price: '280.00', total: '560.00', y: 175 },
+        { name: 'Paneer Butter Masala', qty: '1x', price: '220.00', total: '220.00', y: 205 },
+        { name: 'Garlic Butter Naan', qty: '4x', price: '45.00', total: '180.00', y: 235 },
+        { name: 'Fresh Lime Soda', qty: '3x', price: '40.00', total: '120.00', y: 265 },
+        { name: 'Gulab Jamun (2pcs)', qty: '2x', price: '60.00', total: '120.00', y: 295 },
+      ];
+
+      sampleItems.forEach(it => {
+        ctx.textAlign = 'left';
+        ctx.fillText(it.name, 26, it.y);
+        ctx.textAlign = 'right';
+        ctx.fillText(it.qty, 280, it.y);
+        ctx.fillText(it.price, 360, it.y);
+        ctx.fillText(it.total, 434, it.y);
+      });
+
+      ctx.fillText('------------------------------------------', 26, 335);
+      ctx.textAlign = 'left';
+      ctx.fillText('Sub Total:', 180, 365);
+      ctx.textAlign = 'right';
+      ctx.fillText('1200.00', 434, 365);
+
+      ctx.textAlign = 'left';
+      ctx.fillText('CGST 2.5%:', 180, 395);
+      ctx.textAlign = 'right';
+      ctx.fillText('30.00', 434, 395);
+
+      ctx.textAlign = 'left';
+      ctx.fillText('SGST 2.5%:', 180, 425);
+      ctx.textAlign = 'right';
+      ctx.fillText('30.00', 434, 425);
+
+      ctx.textAlign = 'left';
+      ctx.fillText('Service Charge 5%:', 180, 455);
+      ctx.textAlign = 'right';
+      ctx.fillText('60.00', 434, 455);
+
+      ctx.fillText('==========================================', 26, 485);
+      ctx.font = 'bold 16px "Courier New", Courier, monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('GRAND TOTAL:', 160, 520);
+      ctx.textAlign = 'right';
+      ctx.fillText('₹1320.00', 434, 520);
+
+      ctx.font = '12px "Courier New", Courier, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Thank You For Dining With Us!', 230, 575);
+      ctx.fillText('Please Visit Again!', 230, 595);
+    } else {
+      ctx.font = 'bold 20px "Courier New", Courier, monospace';
+      ctx.fillText('CAFE COFFEE DAY', 230, 48);
+      ctx.font = '12px "Courier New", Courier, monospace';
+      ctx.fillText('Campus Galleria Branch #12', 230, 70);
+      ctx.fillText('GSTIN: 07AAACC2026M1Z2', 230, 88);
+      ctx.fillText('------------------------------------------', 230, 108);
+
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 13px "Courier New", Courier, monospace';
+      ctx.fillText('ITEM                   QTY    PRICE   TOTAL', 26, 132);
+      ctx.font = '13px "Courier New", Courier, monospace';
+      ctx.fillText('------------------------------------------', 26, 146);
+
+      const ccdItems = [
+        { name: 'Cappuccino Large', qty: '2x', price: '180.00', total: '360.00', y: 175 },
+        { name: 'Chocolate Muffin', qty: '1x', price: '120.00', total: '120.00', y: 205 },
+        { name: 'Chicken Club Sandwich', qty: '1x', price: '250.00', total: '250.00', y: 235 },
+      ];
+
+      ccdItems.forEach(it => {
+        ctx.textAlign = 'left';
+        ctx.fillText(it.name, 26, it.y);
+        ctx.textAlign = 'right';
+        ctx.fillText(it.qty, 280, it.y);
+        ctx.fillText(it.price, 360, it.y);
+        ctx.fillText(it.total, 434, it.y);
+      });
+
+      ctx.fillText('------------------------------------------', 26, 280);
+      ctx.textAlign = 'left';
+      ctx.fillText('Sub Total:', 180, 310);
+      ctx.textAlign = 'right';
+      ctx.fillText('730.00', 434, 310);
+
+      ctx.textAlign = 'left';
+      ctx.fillText('CGST 2.5%:', 180, 340);
+      ctx.textAlign = 'right';
+      ctx.fillText('18.25', 434, 340);
+
+      ctx.textAlign = 'left';
+      ctx.fillText('SGST 2.5%:', 180, 370);
+      ctx.textAlign = 'right';
+      ctx.fillText('18.25', 434, 370);
+
+      ctx.textAlign = 'left';
+      ctx.fillText('Service Charge 5%:', 180, 400);
+      ctx.textAlign = 'right';
+      ctx.fillText('36.50', 434, 400);
+
+      ctx.fillText('==========================================', 26, 430);
+      ctx.font = 'bold 16px "Courier New", Courier, monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('GRAND TOTAL:', 160, 465);
+      ctx.textAlign = 'right';
+      ctx.fillText('₹803.00', 434, 465);
+
+      ctx.font = '12px "Courier New", Courier, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Have a great time ahead!', 230, 520);
+    }
+
+    const sampleDataUrl = canvas.toDataURL('image/png');
+    setImageData(sampleDataUrl);
+    toast('Loaded sample receipt! Click "⚡ Process" to run OCR.', 'info');
+  };
+
+  const handleInstantDemo = (type = 'canteen') => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 460;
+    canvas.height = 680;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#faf9f5';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#1e1e1e';
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText(type === 'canteen' ? 'NIGHT CANTEEN & CAFE' : 'CAFE COFFEE DAY', 50, 50);
+    const dataUrl = canvas.toDataURL('image/png');
+
+    let parsed;
+    if (type === 'canteen') {
+      parsed = {
+        items: [
+          { id: generateId(), name: 'Chicken Dum Biryani', qty: 2, unitPricePaise: 28000, totalPaise: 56000, category: 'Food', assignees: [], confidence: 96 },
+          { id: generateId(), name: 'Paneer Butter Masala', qty: 1, unitPricePaise: 22000, totalPaise: 22000, category: 'Food', assignees: [], confidence: 94 },
+          { id: generateId(), name: 'Garlic Butter Naan', qty: 4, unitPricePaise: 4500, totalPaise: 18000, category: 'Food', assignees: [], confidence: 98 },
+          { id: generateId(), name: 'Fresh Lime Soda', qty: 3, unitPricePaise: 4000, totalPaise: 12000, category: 'Food', assignees: [], confidence: 95 },
+          { id: generateId(), name: 'Gulab Jamun (2pcs)', qty: 2, unitPricePaise: 6000, totalPaise: 12000, category: 'Food', assignees: [], confidence: 97 },
+        ],
+        taxes: [
+          { name: 'CGST 2.5%', amountPaise: 3000 },
+          { name: 'SGST 2.5%', amountPaise: 3000 },
+        ],
+        serviceCharge: 6000,
+        discount: 0,
+        total: 132000,
+        rawText: 'NIGHT CANTEEN & CAFE...',
+      };
+    } else {
+      parsed = {
+        items: [
+          { id: generateId(), name: 'Cappuccino Large', qty: 2, unitPricePaise: 18000, totalPaise: 36000, category: 'Food', assignees: [], confidence: 98 },
+          { id: generateId(), name: 'Chocolate Muffin', qty: 1, unitPricePaise: 12000, totalPaise: 12000, category: 'Food', assignees: [], confidence: 95 },
+          { id: generateId(), name: 'Chicken Club Sandwich', qty: 1, unitPricePaise: 25000, totalPaise: 25000, category: 'Food', assignees: [], confidence: 92 },
+        ],
+        taxes: [
+          { name: 'CGST 2.5%', amountPaise: 1825 },
+          { name: 'SGST 2.5%', amountPaise: 1825 },
+        ],
+        serviceCharge: 3650,
+        discount: 0,
+        total: 80300,
+        rawText: 'CAFE COFFEE DAY...',
+      };
+    }
+
+    sessionStorage.setItem('ocrResult', JSON.stringify({ lines: [] }));
+    sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
+    sessionStorage.setItem('receiptImage', dataUrl);
+    toast('Loaded sample data! Proceeding to review...', 'success');
+    navigate(`/group/${groupId}/review`);
+  };
+
   const openCamera = async () => {
     const s = await startCamera();
     if (s) setShowCamera(true);
@@ -800,7 +1174,7 @@ function ReceiptScanner() {
           </div>
 
           {/* Camera button */}
-          <div style={{ textAlign: 'center', marginTop: 20 }}>
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
             <button className="btn btn-secondary" onClick={openCamera}>
               📷 Use Camera
             </button>
@@ -809,6 +1183,36 @@ function ReceiptScanner() {
                 ⚠️ {camError}
               </div>
             )}
+          </div>
+
+          {/* Sample receipts picker */}
+          <div style={{ marginTop: 24, padding: 18, background: 'var(--bg-glass)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-glass)' }}>
+            <div style={{ marginBottom: 12, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              ✨ Don't have a receipt? Try our realistic sample bills:
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => loadSampleReceipt('canteen')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                🍛 Canteen Bill (₹1,320)
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => loadSampleReceipt('ccd')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                ☕ CCD Cafe (₹803)
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => handleInstantDemo('canteen')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--gradient-cool)' }}>
+                ⚡ Instant Demo (Skip OCR)
+              </button>
+            </div>
           </div>
         </div>
       )}

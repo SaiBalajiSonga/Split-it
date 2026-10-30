@@ -251,6 +251,30 @@ function cleanItemName(name) {
 }
 
 /**
+ * Extract price from a text line.
+ */
+function extractPrice(text) {
+  if (!text) return null;
+  // First try price at end of line: e.g. "Total: 803.00" or "Total ₹803.00"
+  const endMatch = text.match(PRICE_REGEX);
+  if (endMatch) {
+    return parsePaise(endMatch[1]);
+  }
+  // Try price anywhere with currency prefix
+  const anyMatches = [...text.matchAll(PRICE_ANYWHERE)];
+  if (anyMatches.length > 0) {
+    const last = anyMatches[anyMatches.length - 1];
+    return parsePaise(last[1]);
+  }
+  // Fallback: look for trailing numeric pattern (e.g., "730.00" or "803")
+  const numMatch = text.match(/(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)\s*$/);
+  if (numMatch) {
+    return parsePaise(numMatch[1]);
+  }
+  return null;
+}
+
+/**
  * Parse a numeric string to paise (integer).
  */
 function parsePaise(str) {

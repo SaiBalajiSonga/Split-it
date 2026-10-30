@@ -1,0 +1,17 @@
+{
+  "name": "SplitSmart — Fair Receipt Splitting",
+  "short_name": "SplitSmart",
+  "description": "OCR receipt scanner, itemized fair bill splitting, and debt simplifier for hostel groups and friends.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#06060f",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
