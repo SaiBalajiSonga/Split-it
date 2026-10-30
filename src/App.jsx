@@ -1306,6 +1306,39 @@ function UPIPaymentModal({ tx, group, onClose, onSettled }) {
               </button>
             </div>
           </div>
+
+          {/* Quick 1-Tap Mobile UPI App Triggers */}
+          <div className="mobile-upi-quick-apps" style={{ width: '100%', marginTop: 2 }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--ink-secondary)', display: 'block', marginBottom: 6, textAlign: 'left' }}>
+              📱 Direct App Payment (Phone):
+            </span>
+            <div className="mobile-upi-apps-grid">
+              <a
+                href={`tez://upi/pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(to?.name || '')}&am=${(amountPaise / 100).toFixed(2)}&cu=INR`}
+                className="mobile-upi-btn btn-gpay"
+              >
+                <span className="upi-app-icon">🔵</span> GPay
+              </a>
+              <a
+                href={`phonepe://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(to?.name || '')}&am=${(amountPaise / 100).toFixed(2)}&cu=INR`}
+                className="mobile-upi-btn btn-phonepe"
+              >
+                <span className="upi-app-icon">🟣</span> PhonePe
+              </a>
+              <a
+                href={`paytmmp://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(to?.name || '')}&am=${(amountPaise / 100).toFixed(2)}&cu=INR`}
+                className="mobile-upi-btn btn-paytm"
+              >
+                <span className="upi-app-icon">🔷</span> Paytm
+              </a>
+              <a
+                href={upiLink}
+                className="mobile-upi-btn btn-any-upi"
+              >
+                <span className="upi-app-icon">⚡</span> Any App
+              </a>
+            </div>
+          </div>
         </div>
 
         <div className="modal-footer" style={{ display: 'flex', gap: 10, marginTop: 16 }}>
@@ -1319,7 +1352,7 @@ function UPIPaymentModal({ tx, group, onClose, onSettled }) {
             href={upiLink}
             className="btn btn-secondary"
             style={{ flex: 1, textAlign: 'center' }}>
-            ⚡ Open App
+            ⚡ Open UPI
           </a>
           <button
             className="btn btn-success"
@@ -1557,6 +1590,7 @@ function ReceiptScanner() {
   const [imageData, setImageData] = useState(null);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef(null);
+  const mobileCamRef = useRef(null);
   const { startCamera, stopCamera, capturePhoto, stream, error: camError, videoRef } = useCamera();
   const [showCamera, setShowCamera] = useState(false);
   const { recognize, progress, status, isProcessing } = useOCR();
@@ -1843,6 +1877,18 @@ Total: 756.00`,
         }}
       />
 
+      {/* Native Smartphone Camera Input (Opens device camera app with HDR/autofocus) */}
+      <input
+        ref={mobileCamRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={e => {
+          if (e.target.files?.[0]) handleFile(e.target.files[0]);
+        }}
+      />
+
       {/* Viewfinder Card with Corner Brackets & Sweeping Laser */}
       <div className="scanner-viewfinder-card">
         {/* 4 Blue Rounded Corner Brackets */}
@@ -1920,12 +1966,15 @@ Total: 756.00`,
             <div className="dropzone-icon">📸</div>
             <div className="dropzone-title">Drop your receipt image here</div>
             <div className="dropzone-hint">or click to browse from device (JPG, PNG)</div>
-            <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'center' }} onClick={e => e.stopPropagation()}>
-              <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
-                📁 Browse File
+            <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+              <button type="button" className="btn btn-primary btn-mobile-cam" onClick={() => mobileCamRef.current?.click()}>
+                📸 Snap with Phone Camera
               </button>
-              <button className="btn btn-secondary btn-sm" onClick={openCamera}>
-                📷 Use Camera
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()}>
+                📁 Choose Photo
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm nav-desktop-only" onClick={openCamera}>
+                📷 Desktop Cam
               </button>
             </div>
             {camError && (
@@ -3113,6 +3162,20 @@ function ReviewEditor() {
                 <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                   <button className="btn btn-ghost" onClick={() => setStep('assign')}>← Back</button>
                   <button className="btn btn-success btn-lg" onClick={handleSave}>
+                    ✓ Save Expense
+                  </button>
+                </div>
+
+                {/* Phone Sticky Bottom Floating Bar for Save Step */}
+                <div className="mobile-sticky-footer">
+                  <div className="mobile-sticky-info">
+                    <span className="mobile-sticky-subtext">Total ({group.members.length} members)</span>
+                    <span className="mobile-sticky-amount">₹{(total / 100).toFixed(2)}</span>
+                  </div>
+                  <button
+                    className="btn btn-success mobile-sticky-action-btn"
+                    onClick={handleSave}
+                  >
                     ✓ Save Expense
                   </button>
                 </div>
