@@ -73,13 +73,16 @@ const QTY_REGEX = /(?:^|\s)(\d+)\s*[xX×]\s*|[xX×]\s*(\d+)(?:\s|$)|(?:qty|quant
 const QTY_PRICE_TOTAL = /(?:^|\s)(\d{1,3})\s*[xX×]?\s*(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)\s+(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)(?!\s*%)(?:\s+(?:[a-zA-Z]{1,8}|[^\w\s%]{1,6}|\+\d{1,2}|[=\-,:~*#\^]))?\s*$/i;
 
 // Tax keywords (including CGST, SGST, SGT, IGST, VAT, Service Tax, and '% on' phrases)
-const TAX_KEYWORDS = /\b(c\.?g\.?s\.?t|s\.?g\.?s\.?t|i\.?g\.?s\.?t|g\.?s\.?t|sgt\b|cgst\b|sgst\b|ses[t1]\b|service\s*tax|tax|vat)\b|%\s*on\b/i;
+const TAX_KEYWORDS = /\b(c\.?g\.?s\.?t|s\.?g\.?s\.?t|i\.?g\.?s\.?t|g\.?s\.?t|sgt\b|cgst\b|sgst\b|ses[t1]\b|service\s*tax|tax|vat)\b|%\s*on\b|total\s+includes?.*gst/i;
 
 // Service charge (note: Service Tax is a tax, not a service charge)
 const SERVICE_CHARGE_KEYWORDS = /\b(service\s*charge|s\.?\s*charge|svc\s*chg)\b/i;
 
 // Total keywords (handles OCR variants like Tota), Tota1, Totl)
-const TOTAL_KEYWORDS = /\b(grand\s*tota[l1I\)]|gross\s*amount|gross\s*tota[l1I\)]|bill\s*tota[l1I\)]|net\s*tota[l1I\)]|total\s*amount|amount\s*due|bill\s*amount|total\s*payable|amount\s*payable|net\s*payable|balance\s*due|final\s*tota[l1I\)]|invoice\s*tota[l1I\)]|tota[l1I\)])/i;
+const TOTAL_KEYWORDS = /\b(grand\s*tota[l1I\)]|gross\s*amount|gross\s*tota[l1I\)]|bill\s*tota[l1I\)]|net\s*tota[l1I\)]|total\s*amount|amount\s*due|bill\s*amount|total\s*payable|amount\s*payable|net\s*payable|balance\s*due|final\s*tota[l1I\)]|invoice\s*tota[l1I\)]|takeout\s*tota[l1I\)]|take\s*away\s*tota[l1I\)]|tota[l1I\)]\s*rounded|rounded\s*tota[l1I\)]|tota[l1I\)])/i;
+
+// Lines that mention total but are informative tax, discount, or quantity lines rather than the payable total
+const NOT_GRAND_TOTAL = /\b(?:total\s+(?:includes?|contains?|tax|gst|vat|disc(?:ount)?|savings?|qty|items?)|total\s*:\s*\d+\s*(?:qty|items?)|%\s*gst)\b/i;
 
 // Subtotal keywords
 const SUBTOTAL_KEYWORDS = /\b(sub\s*-?\s*tota[l1I\)]|item\s*tota[l1I\)]|food\s*tota[l1I\)]|items?\s*sub\s*tota[l1I\)])/i;
@@ -158,6 +161,8 @@ export function parseReceipt(ocrResult) {
   // Find summaryStartIndex (first financial summary keyword)
   for (let i = 0; i < lines.length; i++) {
     const text = (lines[i].text || '').trim();
+    if (TABLE_HEADER_REGEX.test(text)) continue;
+    if (NOT_GRAND_TOTAL.test(text)) continue;
     if (SUBTOTAL_KEYWORDS.test(text) || (TOTAL_KEYWORDS.test(text) && !/covers|pax|items?\s*\(\d+\s*qty\)/i.test(text))) {
       summaryStartIndex = i;
       break;
@@ -217,7 +222,7 @@ export function parseReceipt(ocrResult) {
     if (TABLE_HEADER_REGEX.test(text) || JUST_DASHES.test(text)) continue;
 
     // Check for grand total
-    if (TOTAL_KEYWORDS.test(text) && !SUBTOTAL_KEYWORDS.test(text) && !/covers|pax|items?\s*\(\d+\s*qty\)/i.test(text)) {
+    if (TOTAL_KEYWORDS.test(text) && !SUBTOTAL_KEYWORDS.test(text) && !NOT_GRAND_TOTAL.test(text) && !/covers|pax|items?\s*\(\d+\s*qty\)/i.test(text)) {
       const { price, usedIdx } = findPrice(i);
       if (price !== null) {
         total = price;
@@ -455,12 +460,19 @@ export function parseReceipt(ocrResult) {
     targetItem.confidence = 90;
   }
 
+  // If unpriced items remain that could not be reconciled, discard them so combo sub-items don't clutter the bill
+  const validItems = items.filter(it => it.totalPaise > 0);
+  items.length = 0;
+  items.push(...validItems);
+
   // Robust total calculation & sanity check
   const itemsTotal = items.reduce((sum, item) => sum + item.totalPaise, 0);
   const taxTotal = taxes.reduce((sum, tax) => sum + tax.amountPaise, 0);
   const sc = serviceCharge || 0;
   const disc = discount || 0;
-  const computed = itemsTotal + taxTotal + sc - disc + roundoff;
+  const isTaxInclusive = /incl(?:udes?|\.)?\s*gst|total\s+includes?|gst\s+included/i.test(rawText);
+  const effectiveTaxForSum = isTaxInclusive ? 0 : taxTotal;
+  const computed = itemsTotal + effectiveTaxForSum + sc - disc + roundoff;
 
   // Extract Merchant / Company
   let merchant = '';
@@ -641,35 +653,43 @@ function parseLineItem(text, ocrLine) {
   let qty = 1;
   let unitPricePaise = totalPaise;
 
-  // Pattern A: Leading quantity e.g. "1 MASALA COKE", "3 MALABAR PARATHA"
-  const leadingQtyMatch = nameText.match(/^(\d{1,3})\s+(?=[A-Za-z])/);
-  if (leadingQtyMatch) {
-    const q = parseInt(leadingQtyMatch[1], 10);
-    if (q > 0 && q < 100) {
-      qty = q;
-      unitPricePaise = Math.round(totalPaise / qty);
-      nameText = nameText.substring(leadingQtyMatch[0].length).trim();
-    }
-  } else {
-    // Pattern B: Trailing or inline quantity e.g. "Naan 2x", "Coke x2", "Qty: 2"
-    const qtyMatch = nameText.match(QTY_REGEX);
-    if (qtyMatch) {
-      qty = parseInt(qtyMatch[1] || qtyMatch[2] || qtyMatch[3], 10);
-      if (qty > 0 && qty < 100) {
+  // Pattern A0: Fused qty and size/character code e.g. "1M GrilChicBgr" -> qty: 1, name: "M GrilChicBgr"
+  const fusedMatch = nameText.match(/^(\d{1,2})([A-Za-z])\s+([A-Za-z].*)/);
+  if (fusedMatch) {
+    qty = parseInt(fusedMatch[1], 10);
+    unitPricePaise = Math.round(totalPaise / qty);
+    nameText = fusedMatch[2] + ' ' + fusedMatch[3];
+  } else if (!/^(?:7\s*Up\b)/i.test(nameText)) {
+    // Pattern A: Leading quantity e.g. "1 MASALA COKE", "3 MALABAR PARATHA"
+    const leadingQtyMatch = nameText.match(/^(\d{1,3})\s+(?=[A-Za-z])/);
+    if (leadingQtyMatch) {
+      const q = parseInt(leadingQtyMatch[1], 10);
+      if (q > 0 && q < 100) {
+        qty = q;
         unitPricePaise = Math.round(totalPaise / qty);
-        nameText = nameText.replace(QTY_REGEX, ' ').trim();
-      } else {
-        qty = 1;
+        nameText = nameText.substring(leadingQtyMatch[0].length).trim();
       }
     } else {
-      // Pattern C: Trailing standalone quantity column e.g. "Paneer Tikka 1", "Butter Garlic Naan 2"
-      const trailingQtyMatch = nameText.match(/\s+(\d{1,2})$/);
-      if (trailingQtyMatch) {
-        const q = parseInt(trailingQtyMatch[1], 10);
-        if (q > 0 && q < 50) {
-          qty = q;
+      // Pattern B: Trailing or inline quantity e.g. "Naan 2x", "Coke x2", "Qty: 2"
+      const qtyMatch = nameText.match(QTY_REGEX);
+      if (qtyMatch) {
+        qty = parseInt(qtyMatch[1] || qtyMatch[2] || qtyMatch[3], 10);
+        if (qty > 0 && qty < 100) {
           unitPricePaise = Math.round(totalPaise / qty);
-          nameText = nameText.substring(0, trailingQtyMatch.index).trim();
+          nameText = nameText.replace(QTY_REGEX, ' ').trim();
+        } else {
+          qty = 1;
+        }
+      } else {
+        // Pattern C: Trailing standalone quantity column e.g. "Paneer Tikka 1", "Butter Garlic Naan 2"
+        const trailingQtyMatch = nameText.match(/\s+(\d{1,2})$/);
+        if (trailingQtyMatch) {
+          const q = parseInt(trailingQtyMatch[1], 10);
+          if (q > 0 && q < 50) {
+            qty = q;
+            unitPricePaise = Math.round(totalPaise / qty);
+            nameText = nameText.substring(0, trailingQtyMatch.index).trim();
+          }
         }
       }
     }

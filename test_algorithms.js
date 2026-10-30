@@ -383,6 +383,41 @@ assert(noisyParsed.total === 327500, `Detected Gross Total ₹3,275.00 (got ${no
 const noisyVal = validateTotal(noisyParsed);
 assert(noisyVal.valid === true, `Validation passes with ₹0 discrepancy (${noisyVal.message})`);
 
+console.log('\n[13] Fast-Food Combo Receipt & Tax-Inclusive Parsing (McDonald\x27s Malaysia):');
+const mcdOCR = `
+Gerbang Alaf Restaurants Sdn Bhd
+Licensee of McDonald's
+Level 6, Bangunan TH, Damansara Uptown3
+TAX INVOICE
+INV 141900016842
+ORD #90 -REG #19- 18/01/2018 17:09:21
+ary ITEM TOTAL
+2 M SpicyDeluxe 25.40
+2 M Coke
+2 M Fries
+1M GrilChicBgr 12.50
+1 M Coke
+1 M Fries
+1 Small Cone 1.00
+TakeOut Total {incl GST) 38.90
+Total Rounded 38.90
+Cash Tendered 50.00
+Change 11.10
+TOTAL INCLUDES 6% GST 2.20
+Thank You and Please Come Again.
+`;
+
+const mcdParsed = parseReceipt(mcdOCR);
+assert(mcdParsed.merchant === 'Gerbang Alaf Restaurants Sdn Bhd', `Detected merchant "${mcdParsed.merchant}"`);
+assert(mcdParsed.date === '2018-01-18', `Detected date "${mcdParsed.date}"`);
+assert(mcdParsed.items.length === 3, `Detected exactly 3 priced menu items (got ${mcdParsed.items.length})`);
+assert(mcdParsed.items[0].name === 'M SpicyDeluxe' && mcdParsed.items[0].qty === 2 && mcdParsed.items[0].totalPaise === 2540, 'Detected 2 M SpicyDeluxe 25.40');
+assert(mcdParsed.items[1].name === 'M GrilChicBgr' && mcdParsed.items[1].qty === 1 && mcdParsed.items[1].totalPaise === 1250, 'Detected 1M GrilChicBgr 12.50 with split fused qty');
+assert(mcdParsed.items[2].name === 'Small Cone' && mcdParsed.items[2].qty === 1 && mcdParsed.items[2].totalPaise === 100, 'Detected 1 Small Cone 1.00');
+assert(mcdParsed.total === 3890, `Total = 38.90 / 3890 paise (got ${mcdParsed.total})`);
+assert(mcdParsed.taxes.length === 1 && mcdParsed.taxes[0].amountPaise === 220, `Detected GST 6% tax breakdown ₹2.20 (got ${mcdParsed.taxes[0]?.amountPaise})`);
+assert(mcdParsed.warnings.length === 0, `No arithmetic discrepancy warnings (got ${mcdParsed.warnings.length})`);
+
 console.log(`\n========================================`);
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
 console.log(`========================================\n`);

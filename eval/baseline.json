@@ -1,676 +1,43 @@
 {
-  "evaluatedAt": "2026-10-30T17:39:46.786Z",
-  "totalTestCases": 30,
+  "evaluatedAt": "2026-10-30T18:19:48.524Z",
+  "totalTestCases": 10,
   "datasetSources": [
-    "SROIE",
     "samples"
   ],
   "metrics": {
-    "totalNumericAccuracy": 0.0333,
-    "companyCER": 1,
-    "dateExactMatch": 0,
-    "itemPrecision": 0,
-    "itemRecall": 0,
-    "itemF1": 0,
+    "totalNumericAccuracy": 0.4,
+    "companyCER": 0.2833,
+    "dateExactMatch": 0.1,
+    "itemPrecision": 1,
+    "itemRecall": 0.7778,
+    "itemF1": 0.875,
     "failureRate": 0,
     "crashes": 0,
     "emptyOutputs": 0
   },
   "latency": {
-    "meanMs": 1166,
-    "p50Ms": 1089,
-    "p90Ms": 1791
+    "meanMs": 1117,
+    "p50Ms": 1098,
+    "p90Ms": 1801
   },
   "results": [
     {
       "id": "X00016469670",
-      "source": "SROIE",
+      "source": "samples",
       "status": "OK",
-      "latencyMs": 966,
+      "latencyMs": 977,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 1989800,
-        "itemCount": 5,
-        "subtotal": 1989800,
-        "taxes": []
-      },
-      "gt": {
-        "company": "OJC MARKETING SDN BHD",
-        "date": "15/01/2019",
-        "address": "NO 2 & 4, JALAN BAYU 4, BANDAR SERI ALAM, B1750 MASAI, JOHOR",
-        "total": "193.00",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X00016469671",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 777,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 98900,
-        "itemCount": 3,
-        "subtotal": 98900,
-        "taxes": []
-      },
-      "gt": {
-        "company": "OJC MARKETING SDN BHD",
-        "date": "02/01/2019",
-        "address": "NO 2 & 4, JALAN BAYU 4, BANDAR SERI ALAM, 81750 MASAI, JOHOR",
-        "total": "170.00",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005200931",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1285,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 2860620,
-        "itemCount": 9,
-        "subtotal": 4115000,
-        "taxes": []
-      },
-      "gt": {
-        "company": "PERNIAGAAN ZHENG HUI",
-        "date": "09/02/2018",
-        "address": "NO.59 JALAN PERMAS 9/5 BANDAR BARU PERMAS JAYA 81750 JOHOR BAHRU",
-        "total": "436.20",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005230605",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 758,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 7256,
-        "itemCount": 7,
-        "subtotal": 7228,
-        "taxes": [
-          {
-            "name": "Tax",
-            "amountPaise": 28
-          }
-        ]
-      },
-      "gt": {
-        "company": "PETRON BKT LANJAN SB",
-        "date": "01/02/2018",
-        "address": "KM 458.4 BKT LANJAN UTARA, L/RAYA UTARA SELATAN,SG BULOH 47000 SUNGAI BUL",
-        "total": "4.90",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005230616",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1089,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 572100,
-        "itemCount": 7,
-        "subtotal": 572100,
-        "taxes": []
-      },
-      "gt": {
-        "company": "GERBANG ALAF RESTAURANTS SDN BHD",
-        "date": "18/01/2018",
-        "address": "LEVEL 6, BANGUNAN TH, DAMANSARA UPTOWN3 NO.3, JALAN SS21/39,47400 PETALING JAYA SELANGOR",
-        "total": "38.90",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005230621",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 824,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 246729,
-        "itemCount": 7,
-        "subtotal": 730,
-        "taxes": []
-      },
-      "gt": {
-        "company": "SIN LIANHAP SDN BHD",
-        "date": "05/02/2018",
-        "address": "LOT 13, JALAN IPOH, KG BATU 30, ULU YAM LAMA 44300 BTG KALI, SELANGOR.",
-        "total": "7.30",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005230648",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1036,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 313499,
-        "itemCount": 5,
-        "subtotal": 313500,
-        "taxes": []
-      },
-      "gt": {
-        "company": "CROSS CHANNEL NETWORK SDN. BHD.",
-        "date": "29/01/2018",
-        "address": "47, JALAN MERANTI 1, SEK. 3, BANDAR UTAMA BATANG KALI, 44300 BATANG KALI, SELANGOR.",
-        "total": "6.35",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005230657",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1211,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 5014280,
-        "itemCount": 10,
-        "subtotal": 5014280,
-        "taxes": []
-      },
-      "gt": {
-        "company": "CROSS CHANNEL NETWORK SDN. BHD.",
-        "date": "31/12/2017",
-        "address": "47, JALAN MERANTI 1, SEK. 3, BANDAR UTAMA BATANG KALI, 44300 BATANG KALI, SELANGOR.",
-        "total": "7.95",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005230659",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 823,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 4435045,
-        "itemCount": 6,
-        "subtotal": 4435045,
-        "taxes": []
-      },
-      "gt": {
-        "company": "SWC ENTERPRISE SDN BHD",
-        "date": "08/01/2018",
-        "address": "NO. 5-7, JALAN MAHAGONI 7/1, SEKYSEN 4, BANDAR UTAMA, 44300 BATANG KALI, SELANGOR.",
-        "total": "8.00",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005268275",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1791,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 5161174,
-        "itemCount": 13,
-        "subtotal": 26302,
+        "merchant": "JC MARKETING SDN BHD",
+        "date": "2019-01-15",
+        "total": 1937100,
+        "itemCount": 2,
+        "subtotal": 1937100,
         "taxes": [
           {
             "name": "Tax 6%",
-            "amountPaise": 1578
-          }
-        ]
-      },
-      "gt": {
-        "company": "LIGHTROOM GALLERY SDN BHD",
-        "date": "20/11/2017",
-        "address": "NO: 28, JALAN ASTANA 1C, BANDAR BUKIT RAJA, 41050 KLANG SELANGOR D.E, MALAYSIA",
-        "total": "278.80",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005268408",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 963,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 87806,
-        "itemCount": 8,
-        "subtotal": 71026,
-        "taxes": []
-      },
-      "gt": {
-        "company": "99 SPEED MART S/B",
-        "date": "20-11-17",
-        "address": "LOT P.T. 2811, JALAN ANGSA, TAMAN BERKELEY 41150 KLANG, SELANGOR 1413-SETIA ALAM 2",
-        "total": "169.80",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005288570",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 520,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 1300,
-        "itemCount": 1,
-        "subtotal": 1300,
-        "taxes": []
-      },
-      "gt": {
-        "company": "SECURE PARKING CORPORATION S/B",
-        "date": "23.03.18",
-        "address": "RIVERWALK VILLAGE BATU 3, JALAN IPOH 51200 KL.",
-        "total": "1.00",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005301666",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1794,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 5161174,
-        "itemCount": 13,
-        "subtotal": 26302,
-        "taxes": [
-          {
-            "name": "Tax 6%",
-            "amountPaise": 1578
-          }
-        ]
-      },
-      "gt": {
-        "company": "LIGHTROOM GALLERY SDN BHD",
-        "date": "20/11/2017",
-        "address": "NO: 28, JALAN ASTANA 1C, BANDAR BUKIT RAJA, 41050 KLANG SELANGOR D.E, MALAYSIA",
-        "total": "278.80",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005337867",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1077,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 203689,
-        "itemCount": 4,
-        "subtotal": 2594,
-        "taxes": [
-          {
-            "name": "Tax 6%",
-            "amountPaise": 171
-          },
-          {
-            "name": "Tax 6%",
-            "amountPaise": 171
-          },
-          {
-            "name": "Tax 0%",
             "amountPaise": 0
           }
         ]
-      },
-      "gt": {
-        "company": "OLD TOWN KOPITAM SND BHD",
-        "date": "22 MAR 18",
-        "address": "SRI RAMPAI",
-        "total": "30.25",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005337877",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 857,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 15500,
-        "itemCount": 9,
-        "subtotal": 14800,
-        "taxes": [
-          {
-            "name": "Tax",
-            "amountPaise": 300
-          },
-          {
-            "name": "Tax",
-            "amountPaise": 400
-          }
-        ]
-      },
-      "gt": {
-        "company": "UROKO JAPANESE CUISINE SDN BHD",
-        "date": "20/03/2018",
-        "address": "22A-1, JALAN 17/54, SECTION 17, 46400 PETALING JAYA, SELANGOR.",
-        "total": "53.00",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005361906",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 2165,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 226370,
-        "itemCount": 6,
-        "subtotal": 2580,
-        "taxes": []
-      },
-      "gt": {
-        "company": "TED HENG STATIONERY & BOOKS",
-        "date": "27/01/2018",
-        "address": "NO. 53, JALAN BESAR, 45600 BATANG BERJUNTAI SELANGOR DARUL EHSAN",
-        "total": "27.35",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005361908",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1234,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 234240,
-        "itemCount": 5,
-        "subtotal": 12000,
-        "taxes": []
-      },
-      "gt": {
-        "company": "TEO HENG STATIONERY & BOOKS",
-        "date": "15/03/2018",
-        "address": "NO. 53, JALAN BESAR, 45600 BATANG BERJUNTAI SELANGOR DARUL EHSAN",
-        "total": "127.20",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005361912",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1552,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 202011,
-        "itemCount": 4,
-        "subtotal": 100,
-        "taxes": []
-      },
-      "gt": {
-        "company": "TEO HENG STATIONERY & BOOKS",
-        "date": "29/01/2018",
-        "address": "NO. 53, JALAN BESAR, 45600 BATANG BERJUNTAI SELANGOR DARUL EHSAN",
-        "total": "1.05",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005361923",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1602,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 32000,
-        "itemCount": 5,
-        "subtotal": 10564,
-        "taxes": []
-      },
-      "gt": {
-        "company": "SWC ENTERPRISE SDN BHD",
-        "date": "02/01/2018",
-        "address": "8 & 10, JALAN IJOK PERMAI 1, PUSAT NIAGA IJOK PERMAI, 48000 IJOK, SELANGOR.",
-        "total": "4.20",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X51005365187",
-      "source": "SROIE",
-      "status": "OK",
-      "latencyMs": 1578,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 1311010,
-        "itemCount": 14,
-        "subtotal": 1311010,
-        "taxes": []
-      },
-      "gt": {
-        "company": "F&P PHARMACY",
-        "date": "02/03/2018",
-        "address": "NO.20. GROUND FLOOR, JALAN BS 10/6 TAMAN BUKIT SERDANG, SEKSYEN 10, 43300 SERI KEMBANGAN. SELANGOR DARUL EHSAN",
-        "total": "31.90",
-        "items": []
-      },
-      "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
-      }
-    },
-    {
-      "id": "X00016469670",
-      "source": "samples",
-      "status": "OK",
-      "latencyMs": 901,
-      "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 1989800,
-        "itemCount": 5,
-        "subtotal": 1989800,
-        "taxes": []
       },
       "gt": {
         "company": "OJC MARKETING SDN BHD",
@@ -680,8 +47,8 @@
       },
       "metrics": {
         "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
+        "companyMatch": true,
+        "companyCER": 0.0476,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -692,13 +59,13 @@
       "id": "X00016469671",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 761,
+      "latencyMs": 764,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 98900,
-        "itemCount": 3,
-        "subtotal": 98900,
+        "merchant": "JC MARKETING SDN BHD",
+        "date": "2019-01-02",
+        "total": 80500,
+        "itemCount": 1,
+        "subtotal": 80500,
         "taxes": []
       },
       "gt": {
@@ -709,8 +76,8 @@
       },
       "metrics": {
         "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
+        "companyMatch": true,
+        "companyCER": 0.0476,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -721,14 +88,23 @@
       "id": "X51005200931",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 1287,
+      "latencyMs": 1276,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 2860620,
-        "itemCount": 9,
+        "merchant": "GOGIANT ENGINEERING (#1) SDN BHD",
+        "date": "2018-02-09",
+        "total": 2168460,
+        "itemCount": 3,
         "subtotal": 4115000,
-        "taxes": []
+        "taxes": [
+          {
+            "name": "Tax",
+            "amountPaise": 2460
+          },
+          {
+            "name": "Tax",
+            "amountPaise": 246000
+          }
+        ]
       },
       "gt": {
         "company": "PERNIAGAAN ZHENG HUI",
@@ -739,7 +115,7 @@
       "metrics": {
         "totalMatch": false,
         "companyMatch": false,
-        "companyCER": 1,
+        "companyCER": 1.3,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -750,14 +126,18 @@
       "id": "X51005230605",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 717,
+      "latencyMs": 715,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 7256,
-        "itemCount": 7,
-        "subtotal": 7228,
+        "merchant": "ALSERKAM ENTERPRISE",
+        "date": "2018-02-01",
+        "total": 490,
+        "itemCount": 2,
+        "subtotal": 490,
         "taxes": [
+          {
+            "name": "Tax",
+            "amountPaise": 28
+          },
           {
             "name": "Tax",
             "amountPaise": 28
@@ -771,9 +151,9 @@
         "total": "4.90"
       },
       "metrics": {
-        "totalMatch": false,
+        "totalMatch": true,
         "companyMatch": false,
-        "companyCER": 1,
+        "companyCER": 0.9,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -784,14 +164,19 @@
       "id": "X51005230616",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 1130,
+      "latencyMs": 1098,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 572100,
-        "itemCount": 7,
-        "subtotal": 572100,
-        "taxes": []
+        "merchant": "Gerbang Alaf Restaurants Sdn Bhd",
+        "date": "2018-01-18",
+        "total": 3890,
+        "itemCount": 3,
+        "subtotal": 3890,
+        "taxes": [
+          {
+            "name": "Tax 6%",
+            "amountPaise": 220
+          }
+        ]
       },
       "gt": {
         "company": "GERBANG ALAF RESTAURANTS SDN BHD",
@@ -800,9 +185,9 @@
         "total": "38.90"
       },
       "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
+        "totalMatch": true,
+        "companyMatch": true,
+        "companyCER": 0,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -813,12 +198,12 @@
       "id": "X51005230621",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 814,
+      "latencyMs": 872,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 246729,
-        "itemCount": 7,
+        "merchant": "SIN LIANHAP SDN BHD        ;",
+        "date": "2018-02-08",
+        "total": 200,
+        "itemCount": 1,
         "subtotal": 730,
         "taxes": []
       },
@@ -831,7 +216,7 @@
       "metrics": {
         "totalMatch": false,
         "companyMatch": false,
-        "companyCER": 1,
+        "companyCER": 0.4737,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -842,14 +227,23 @@
       "id": "X51005230648",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 1046,
+      "latencyMs": 1047,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 313499,
-        "itemCount": 5,
-        "subtotal": 313500,
-        "taxes": []
+        "merchant": "CROSS CHANNEL NETWORK SDN. BHD.",
+        "date": "2018-01-29",
+        "total": 635,
+        "itemCount": 0,
+        "subtotal": 0,
+        "taxes": [
+          {
+            "name": "Tax",
+            "amountPaise": 63600
+          },
+          {
+            "name": "Tax",
+            "amountPaise": 36000
+          }
+        ]
       },
       "gt": {
         "company": "CROSS CHANNEL NETWORK SDN. BHD.",
@@ -858,9 +252,9 @@
         "total": "6.35"
       },
       "metrics": {
-        "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
+        "totalMatch": true,
+        "companyMatch": true,
+        "companyCER": 0,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -871,14 +265,23 @@
       "id": "X51005230657",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 1206,
+      "latencyMs": 1213,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 5014280,
-        "itemCount": 10,
-        "subtotal": 5014280,
-        "taxes": []
+        "merchant": "CROSS CHANNEL NE \"WORK SDN. BHD.",
+        "date": "2017-12-31",
+        "total": 500000,
+        "itemCount": 1,
+        "subtotal": 500000,
+        "taxes": [
+          {
+            "name": "Tax",
+            "amountPaise": 180
+          },
+          {
+            "name": "Tax",
+            "amountPaise": 100
+          }
+        ]
       },
       "gt": {
         "company": "CROSS CHANNEL NETWORK SDN. BHD.",
@@ -888,8 +291,8 @@
       },
       "metrics": {
         "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
+        "companyMatch": true,
+        "companyCER": 0.0645,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -900,17 +303,25 @@
       "id": "X51005268275",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 1790,
+      "latencyMs": 1801,
       "pred": {
-        "merchant": "",
-        "date": "",
-        "total": 5161174,
-        "itemCount": 13,
+        "merchant": "LIGHTROOM GALLERY SDN BHD",
+        "date": "2017-11-20",
+        "total": 4585714,
+        "itemCount": 4,
         "subtotal": 26302,
         "taxes": [
           {
+            "name": "Tax",
+            "amountPaise": 439500
+          },
+          {
             "name": "Tax 6%",
             "amountPaise": 1578
+          },
+          {
+            "name": "Tax",
+            "amountPaise": 7800
           }
         ]
       },
@@ -922,8 +333,8 @@
       },
       "metrics": {
         "totalMatch": false,
-        "companyMatch": false,
-        "companyCER": 1,
+        "companyMatch": true,
+        "companyCER": 0,
         "dateMatch": false,
         "itemPrecision": 0,
         "itemRecall": 0,
@@ -934,10 +345,10 @@
       "id": "bombay_canteen",
       "source": "samples",
       "status": "OK",
-      "latencyMs": 1416,
+      "latencyMs": 1404,
       "pred": {
-        "merchant": "",
-        "date": "",
+        "merchant": "THE BOMBAY CANTEEN",
+        "date": "2016-05-21",
         "total": 327500,
         "itemCount": 7,
         "subtotal": 249500,
@@ -947,11 +358,11 @@
             "amountPaise": 15918
           },
           {
-            "name": "VAT 5%",
+            "name": "VAT ON CARB BEV 25%",
             "amountPaise": 5500
           },
           {
-            "name": "VAT 2.5%",
+            "name": "VAT ON FOOD 12.5%",
             "amountPaise": 3555600
           }
         ]
@@ -1044,12 +455,12 @@
       },
       "metrics": {
         "totalMatch": true,
-        "companyMatch": false,
-        "companyCER": 1,
-        "dateMatch": false,
-        "itemPrecision": 0,
-        "itemRecall": 0,
-        "itemF1": 0
+        "companyMatch": true,
+        "companyCER": 0,
+        "dateMatch": true,
+        "itemPrecision": 1,
+        "itemRecall": 0.7777777777777778,
+        "itemF1": 0.8750000000000001
       }
     }
   ]

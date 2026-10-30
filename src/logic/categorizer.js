@@ -25,7 +25,7 @@ export const CANDIDATE_CATEGORIES = [
 // High-precision keyword taxonomy for instantaneous classification
 const KEYWORD_TAXONOMY = {
   Food: [
-    'margarita', 'pizza', 'burger', 'sandwich', 'pasta', 'naan', 'roti', 'paratha',
+    'margarita', 'pizza', 'burger', 'bgr', 'deluxe', 'cone', 'sundae', 'wrap', 'nugget', 'fries', 'taco', 'sandwich', 'pasta', 'naan', 'roti', 'paratha',
     'curry', 'biryani', 'dal', 'rice', 'paneer', 'chicken', 'mutton', 'prawn', 'fish',
     'kebab', 'tikka', 'salad', 'soup', 'coke', 'pepsi', 'coffee', 'tea', 'latte',
     'cappuccino', 'shake', 'juice', 'dessert', 'ice cream', 'cake', 'muffin', 'dosa',
