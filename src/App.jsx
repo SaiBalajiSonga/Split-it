@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { HashRouter, Routes, Route, useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { ToastProvider, useToast, useGroups, useExpenses, useOCR, useCamera } from './hooks/useAppHooks';
@@ -38,9 +39,84 @@ export default function App() {
   );
 }
 
+// ===== USER PROFILE & UPI SETTINGS MODAL =====
+function ProfileModal({ onClose }) {
+  const [name, setName] = useState(localStorage.getItem('splitsmart_my_name') || '');
+  const [upi, setUpi] = useState(localStorage.getItem('splitsmart_my_upi') || '');
+  const toast = useToast();
+
+  const handleSave = () => {
+    localStorage.setItem('splitsmart_my_name', name.trim());
+    localStorage.setItem('splitsmart_my_upi', upi.trim());
+    window.dispatchEvent(new Event('splitsmart_profile_updated'));
+    toast('Profile and personal UPI ID saved!', 'success');
+    onClose();
+  };
+
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
+      <div className="modal-content animate-scaleIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, margin: 'auto' }}>
+        <div className="modal-header">
+          <h2 className="modal-title" style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>👤</span>
+            <span>My Profile & UPI</span>
+          </h2>
+          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p style={{ fontSize: '0.85rem', color: 'var(--ink-muted)', margin: 0, lineHeight: 1.5 }}>
+            Set your personal name and UPI ID. Whenever anyone settles a bill with you in any group, their QR code and UPI link will pay directly to this ID!
+          </p>
+          <div>
+            <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: 6, display: 'block' }}>Your Name</label>
+            <input
+              className="input"
+              placeholder="e.g. Sai Balaji"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="label" style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: 6, display: 'block' }}>Your Personal UPI ID</label>
+            <input
+              className="input input-mono"
+              placeholder="e.g. saibalaji@okhdfcbank"
+              value={upi}
+              onChange={e => setUpi(e.target.value)}
+            />
+            <span style={{ fontSize: '0.74rem', color: 'var(--ink-muted)', marginTop: 4, display: 'block' }}>
+              Accepts any VPA: GPay, PhonePe, Paytm, BHIM, Cred, etc.
+            </span>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSave}>Save Settings</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ===== MINIMAL CANVAS NAVBAR (Matching Reference) =====
 function Navbar({ onCreateGroup }) {
   const navigate = useNavigate();
+  const [showProfile, setShowProfile] = useState(false);
+  const [myName, setMyName] = useState(localStorage.getItem('splitsmart_my_name') || '');
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setMyName(localStorage.getItem('splitsmart_my_name') || '');
+    };
+    window.addEventListener('splitsmart_profile_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('splitsmart_profile_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
 
   const scrollToGroups = (e) => {
     e.preventDefault();
@@ -82,11 +158,20 @@ function Navbar({ onCreateGroup }) {
       </div>
 
       <div className="nav-actions-row">
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => setShowProfile(true)}
+          title="Set your name and default UPI ID"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, border: '1px solid var(--border-card)' }}
+        >
+          👤 {myName ? `${myName} (You)` : 'My Profile & UPI'}
+        </button>
         <ExportImportButton />
         <button className="btn btn-secondary btn-sm" onClick={onCreateGroup}>
           + New Group
         </button>
       </div>
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
     </nav>
   );
 }
@@ -739,16 +824,51 @@ function RenameModal({ group, onClose, onUpdate }) {
 function MemberModal({ group, onClose, onUpdate }) {
   const [members, setMembers] = useState([...group.members]);
   const [newName, setNewName] = useState('');
+  const [newUpi, setNewUpi] = useState('');
+  const [editingUpiId, setEditingUpiId] = useState(null);
+  const [tempUpi, setTempUpi] = useState('');
   const toast = useToast();
+
+  const myName = localStorage.getItem('splitsmart_my_name') || '';
+  const myUpi = localStorage.getItem('splitsmart_my_upi') || '';
 
   const addMember = () => {
     if (!newName.trim()) return;
-    setMembers([...members, { id: generateId(), name: newName.trim(), color: getMemberColor(members.length) }]);
+    const trimmed = newName.trim();
+    const isMe = myName && trimmed.toLowerCase() === myName.toLowerCase();
+    const upiVal = newUpi.trim() || (isMe ? myUpi : '');
+    setMembers([...members, { 
+      id: generateId(), 
+      name: trimmed, 
+      upi: upiVal, 
+      color: getMemberColor(members.length) 
+    }]);
     setNewName('');
+    setNewUpi('');
   };
 
   const removeMember = (id) => {
     setMembers(members.filter(m => m.id !== id));
+  };
+
+  const setAsMe = (member) => {
+    localStorage.setItem('splitsmart_my_name', member.name);
+    if (member.upi) {
+      localStorage.setItem('splitsmart_my_upi', member.upi);
+    }
+    window.dispatchEvent(new Event('splitsmart_profile_updated'));
+    toast(`Tagged "${member.name}" as You!`, 'success');
+  };
+
+  const saveMemberUpi = (id) => {
+    setMembers(members.map(m => m.id === id ? { ...m, upi: tempUpi.trim() } : m));
+    const member = members.find(m => m.id === id);
+    if (member && myName && member.name.toLowerCase() === myName.toLowerCase()) {
+      localStorage.setItem('splitsmart_my_upi', tempUpi.trim());
+      window.dispatchEvent(new Event('splitsmart_profile_updated'));
+    }
+    setEditingUpiId(null);
+    toast('UPI ID updated', 'success');
   };
 
   const save = () => {
@@ -757,38 +877,129 @@ function MemberModal({ group, onClose, onUpdate }) {
     onClose();
   };
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
+      <div className="modal-content animate-scaleIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, margin: 'auto' }}>
         <div className="modal-header">
-          <h2 className="modal-title">Manage Members</h2>
+          <h2 className="modal-title" style={{ fontSize: '1.2rem' }}>👥 Manage Members & UPI</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
-        <div className="modal-body">
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input className="input" placeholder="Add member" value={newName}
-              onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addMember(); }} />
-            <button className="btn btn-secondary" onClick={addMember}>Add</button>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Add member row */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--ink-secondary)' }}>Add Friend to Group</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="input"
+                placeholder="Name (e.g. Anjali)"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addMember(); }}
+                style={{ flex: 1 }}
+              />
+              <input
+                className="input input-mono"
+                placeholder="UPI ID (optional)"
+                value={newUpi}
+                onChange={e => setNewUpi(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addMember(); }}
+                style={{ flex: 1 }}
+              />
+              <button className="btn btn-secondary btn-sm" onClick={addMember}>+ Add</button>
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-            {members.map((m, i) => (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--bg-glass)', borderRadius: 'var(--radius-sm)' }}>
-                <div className="avatar avatar-sm" style={{ background: m.color || getMemberColor(i) }}>
-                  {getInitials(m.name)}
+
+          {/* Members list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+            {members.map((m, i) => {
+              const isMe = (myName && m.name.toLowerCase() === myName.toLowerCase()) || m.isMe;
+              const isEditingThisUpi = editingUpiId === m.id;
+
+              return (
+                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', background: isMe ? 'var(--accent-blue-light)' : 'var(--bg-canvas)', border: isMe ? '1px solid #bfdbfe' : '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div className="avatar avatar-sm" style={{ background: m.color || getMemberColor(i) }}>
+                      {getInitials(m.name)}
+                    </div>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 600, color: 'var(--ink-primary)' }}>{m.name}</span>
+                      {isMe ? (
+                        <span className="badge badge-cyan" style={{ fontSize: '0.68rem' }}>⭐ You</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          style={{ border: '1px solid var(--border-subtle)', fontSize: '0.68rem', padding: '2px 6px' }}
+                          onClick={() => setAsMe(m)}
+                          title="Tag this member as yourself"
+                        >
+                          ⭐ Set as Me
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      className="btn btn-ghost btn-icon"
+                      style={{ fontSize: '0.75rem', width: 28, height: 28 }}
+                      onClick={() => removeMember(m.id)}
+                      title="Remove member"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Member UPI Row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 38 }}>
+                    {isEditingThisUpi ? (
+                      <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                        <input
+                          className="input input-mono input-sm"
+                          placeholder="e.g. name@okhdfcbank"
+                          value={tempUpi}
+                          onChange={e => setTempUpi(e.target.value)}
+                          autoFocus
+                          style={{ flex: 1, fontSize: '0.78rem' }}
+                        />
+                        <button className="btn btn-primary btn-xs" onClick={() => saveMemberUpi(m.id)}>Save</button>
+                        <button className="btn btn-ghost btn-xs" onClick={() => setEditingUpiId(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.76rem' }}>
+                        <span style={{ color: 'var(--ink-muted)' }}>UPI:</span>
+                        {m.upi ? (
+                          <span
+                            className="input-mono"
+                            style={{ color: 'var(--ink-secondary)', fontWeight: 600, cursor: 'pointer', background: 'rgba(0,0,0,0.04)', padding: '2px 6px', borderRadius: 4 }}
+                            onClick={() => { setEditingUpiId(m.id); setTempUpi(m.upi); }}
+                            title="Click to edit UPI ID"
+                          >
+                            {m.upi} ✏️
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            style={{ color: 'var(--accent-blue)', padding: '2px 6px' }}
+                            onClick={() => { setEditingUpiId(m.id); setTempUpi(''); }}
+                          >
+                            + Add UPI ID
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <span style={{ flex: 1, fontWeight: 500 }}>{m.name}</span>
-                <button className="btn btn-ghost btn-icon" style={{ fontSize: '0.7rem' }}
-                  onClick={() => removeMember(m.id)}>✕</button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={save}>Save</button>
+          <button className="btn btn-primary" onClick={save}>Save Changes</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -871,9 +1082,28 @@ function BalancesTab({ expenses, members }) {
 // ===== UPI PAYMENT & QR MODAL =====
 function UPIPaymentModal({ tx, group, onClose, onSettled }) {
   const { from, to, amountPaise, settled } = tx;
-  const [upiId, setUpiId] = useState(to?.upi || `${to?.name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@okaxis`);
+  const myName = localStorage.getItem('splitsmart_my_name') || '';
+  const myUpi = localStorage.getItem('splitsmart_my_upi') || '';
+  const isToMe = (myName && to?.name?.toLowerCase().trim() === myName.toLowerCase().trim()) || to?.isMe;
+  const initialUpi = to?.upi || (isToMe && myUpi) || `${to?.name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee'}@okaxis`;
+  
+  const [upiId, setUpiId] = useState(initialUpi);
   const [qrUrl, setQrUrl] = useState('');
   const toast = useToast();
+
+  const handleSaveUpi = async () => {
+    if (!upiId.trim()) return;
+    const cleanUpi = upiId.trim();
+    if (group) {
+      const updatedMembers = group.members.map(m => m.id === to?.id ? { ...m, upi: cleanUpi } : m);
+      await dbOps.saveGroup({ ...group, members: updatedMembers });
+    }
+    if (isToMe) {
+      localStorage.setItem('splitsmart_my_upi', cleanUpi);
+      window.dispatchEvent(new Event('splitsmart_profile_updated'));
+    }
+    toast(`Saved UPI ID for ${to?.name || 'payee'}!`, 'success');
+  };
 
   const upiLink = generateUPILink({
     payeeUPI: upiId,
@@ -900,11 +1130,11 @@ function UPIPaymentModal({ tx, group, onClose, onSettled }) {
 
   const suffixes = ['@okhdfcbank', '@oksbi', '@paytm', '@ybl', '@okaxis'];
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, textAlign: 'center' }}>
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 9999 }}>
+      <div className="modal-content animate-scaleIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, textAlign: 'center', margin: 'auto' }}>
         <div className="modal-header">
-          <h2 className="modal-title" style={{ fontSize: '1.1rem' }}>📱 UPI Payment & QR</h2>
+          <h2 className="modal-title" style={{ fontSize: '1.15rem' }}>📱 UPI Payment & QR</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
@@ -912,7 +1142,7 @@ function UPIPaymentModal({ tx, group, onClose, onSettled }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
             <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{from?.name}</span>
             <span style={{ color: 'var(--accent-cyan)' }}>→ pays →</span>
-            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{to?.name}</span>
+            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{to?.name} {isToMe ? '(You)' : ''}</span>
           </div>
 
           {/* Amount banner */}
@@ -927,7 +1157,7 @@ function UPIPaymentModal({ tx, group, onClose, onSettled }) {
           </div>
 
           {/* Scannable QR Code */}
-          <div className="qr-container" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.5)', borderRadius: 16, padding: 12 }}>
+          <div className="qr-container" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)', borderRadius: 16, padding: 12, background: '#ffffff' }}>
             {qrUrl ? (
               <img src={qrUrl} alt="UPI QR Code" style={{ width: 220, height: 220, display: 'block' }} />
             ) : (
@@ -942,7 +1172,12 @@ function UPIPaymentModal({ tx, group, onClose, onSettled }) {
 
           {/* Payee UPI ID */}
           <div style={{ width: '100%', textAlign: 'left', marginTop: 4 }}>
-            <label className="label" style={{ fontSize: '0.75rem' }}>Payee UPI ID</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <label className="label" style={{ fontSize: '0.75rem', margin: 0 }}>Payee UPI ID</label>
+              {isToMe && (
+                <span className="badge badge-cyan" style={{ fontSize: '0.68rem' }}>⭐ Your Personal UPI</span>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <input
                 className="input input-mono input-sm"
@@ -958,21 +1193,32 @@ function UPIPaymentModal({ tx, group, onClose, onSettled }) {
                 📋
               </button>
             </div>
-            {/* Quick suffix chips */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-              {suffixes.map(sfx => (
-                <button
-                  key={sfx}
-                  type="button"
-                  className="badge badge-glass"
-                  style={{ cursor: 'pointer', fontSize: '0.65rem' }}
-                  onClick={() => {
-                    const prefix = upiId.split('@')[0] || to?.name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee';
-                    setUpiId(prefix + sfx);
-                  }}>
-                  {sfx}
-                </button>
-              ))}
+            {/* Quick suffix chips + Save button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {suffixes.map(sfx => (
+                  <button
+                    key={sfx}
+                    type="button"
+                    className="badge badge-glass"
+                    style={{ cursor: 'pointer', fontSize: '0.65rem' }}
+                    onClick={() => {
+                      const prefix = upiId.split('@')[0] || to?.name?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'payee';
+                      setUpiId(prefix + sfx);
+                    }}>
+                    {sfx}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={handleSaveUpi}
+                title="Save this UPI ID for future settlements"
+                style={{ fontSize: '0.72rem', border: '1px solid var(--border-subtle)' }}
+              >
+                💾 Remember UPI
+              </button>
             </div>
           </div>
         </div>
@@ -998,7 +1244,8 @@ function UPIPaymentModal({ tx, group, onClose, onSettled }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

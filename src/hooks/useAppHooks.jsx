@@ -144,7 +144,7 @@ export function useOCR() {
 
       await worker.setParameters({
         preserve_interword_spaces: '1',
-        tessedit_pageseg_mode: '4', // PSM 4: Assume a single column of variable sizes (Standard for receipts)
+        tessedit_pageseg_mode: '6', // PSM 6: Uniform block of text (Preserves complete left-to-right receipt rows without dropping prices)
       });
 
       workerRef.current = worker;

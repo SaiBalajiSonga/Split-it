@@ -20,16 +20,17 @@ import { classifyItemFast } from './categorizer.js';
 
 // Matches a price at or near the end of a line (allows optional short trailing OCR noise like "200.00 ha", "225.00 Bo", "325.00 v", "360.00 |")
 // Uses negative lookbehind (?<!\d) so it never slices the tail of an alphanumeric ID or phone number
-const PRICE_REGEX = /(?:₹|rs\.?|inr\.?|rupees?)?\s*(?<!\d)(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)\s*(?:[a-zA-Z]{1,5}|[^\w\s]{1,5})?\s*$/i;
+// CRITICAL: (?!\s*%) prevents matching percentage rates (e.g. 5.80%, 10%, 25%, 12.5%) as currency prices!
+const PRICE_REGEX = /(?:₹|rs\.?|inr\.?|rupees?)?\s*(?<!\d)(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)(?!\s*%)\s*(?:[a-zA-Z]{1,5}|[^\w\s%]{1,5})?\s*$/i;
 
-// Matches a price anywhere in the line
-const PRICE_ANYWHERE = /(?:₹|rs\.?|inr\.?)\s*(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)/gi;
+// Matches a price anywhere in the line (not followed by %)
+const PRICE_ANYWHERE = /(?:₹|rs\.?|inr\.?)\s*(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)(?!\s*%)/gi;
 
 // Quantity patterns
 const QTY_REGEX = /(?:^|\s)(\d+)\s*[xX×]\s*|[xX×]\s*(\d+)(?:\s|$)|(?:qty|quantity)\s*[:.]?\s*(\d+)/i;
 
-// Two-number pattern: "2 x 150.00 300.00" or "2 150 300"
-const QTY_PRICE_TOTAL = /(\d+)\s*[xX×]?\s*(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)\s+(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)\s*(?:[a-zA-Z]{1,5}|[^\w\s]{1,5})?\s*$/i;
+// Two-number pattern: "2 x 150.00 300.00" or "2 150 300" (qty is bounded 1-100, requires whitespace before qty)
+const QTY_PRICE_TOTAL = /(?:^|\s)(\d{1,3})\s*[xX×]?\s*(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)\s+(?:₹|rs\.?|inr\.?)?\s*(\d+(?:\.\d{1,2})?)\s*(?:[a-zA-Z]{1,5}|[^\w\s%]{1,5})?\s*$/i;
 
 // Tax keywords (including CGST, SGST, SGT, IGST, VAT, Service Tax, and '% on' phrases)
 const TAX_KEYWORDS = /\b(c\.?g\.?s\.?t|s\.?g\.?s\.?t|i\.?g\.?s\.?t|g\.?s\.?t|sgt\b|cgst\b|sgst\b|ses[t1]\b|service\s*tax|tax|vat)\b|%\s*on\b/i;
@@ -50,10 +51,10 @@ const DISCOUNT_KEYWORDS = /\b(discount|disc\.?|off|savings|offer|promo|coupon)\b
 const ROUNDOFF_KEYWORDS = /\b(round\s*off|rounding|adj\.?|adjustments?)\b/i;
 
 // Table header keywords to skip (matches traditional tabular headers like "ITEM QTY RATE AMOUNT")
-const TABLE_HEADER_REGEX = /(?:^(?:qty|quantity|s\.?no|#)?\s*(?:item|items|description|desc|particulars)\s*(?:qty|quantity)?\s*(?:rate|price|unit\s*price)?\s*(?:amount|total|net|val)?$|\b(?:item|items|description|desc|particulars)\b.*\b(?:qty|quantity|rate|price|amount|total|val)\b)/i;
+const TABLE_HEADER_REGEX = /(?:^(?:qty|quantity|s\.?no|#)?\s*(?:item|items|description|desc|particulars)\s*(?:qty|quantity)?\s*(?:rate|price|unit\s*price)?\s*(?:amount|amoun|total|net|val)?|\b(?:item|items|description|desc|particulars)\b.*\b(?:qty|quantity|rate|price|amount|amoun|total|val)\b|^\s*amount\s*$)/i;
 
-// Universal Noise Patterns: addresses, postal pincodes, store metadata, phone numbers, POS terminals, payment tenders
-const NOISE_KEYWORDS = /\b(pvt|ltd|limited|corporate|park|road|street|marg|vihar|nagar|floor|complex|bldg|building|tower|mall|plaza|avenue|lane|highway|sector|phase|block|opp\.?|near\b|mumbai|delhi|bangalore|bengaluru|hyderabad|chennai|pune|kolkata|ahmedabad|maharashtra|karnataka|gujarat|india|pincode|pin\s*code|pin\s*-\s*\d|[1-9]\d{5}\b|draft\b|invoice\b|bill\s*n[ou]|order\s*#|order\s*n[ou]|token\b|covers?\b|shift\b|pax\b|cashier\b|server\b|waiter\b|captain\b|steward\b|host\b|hostess\b|guest\b|counter\b|outlet\b|branch\b|station\b|terminal\b|table\b|foodandbeverages|f\s*&\s*b|gstin|fssai|tin\s*n[ou]|cin\b|pan\b|s\.?t\.?\s*n[ou]|vat\s*no|vat\s*reg|hsn\b|sac\b|address|phone|tel|mob|fax|email|thank|welcome|visit|www\.|\.com|\.in|duplicate|original|reprint|e\s*&\s*o\.?e|customer\s*copy|merchant\s*copy|have\s*a\s*nice|come\s*again|feedback|rate\s*us|scan\s*to|upi|paytm|gpay|phonepe|visa\b|mastercard\b|amex\b|rupay\b|card\s*ending|chip\s*read|swipe|auth\s*code|appr\s*code|rrn\b|aid\b|mid\b|tid\b|batch\b|trace\b|txn\b|kpt\b|kot\b|dine\s*in|take\s*away|parcel|delivery|wi-?fi\s*(?:pass|key|network|code)|free\s*wi-?fi|password\b|goods\s*once\s*sold|subject\s*to|jurisdiction)\b/i;
+// Universal Noise Patterns: addresses, postal pincodes, store metadata, phone numbers, POS terminals, payment tenders, social media
+const NOISE_KEYWORDS = /\b(pvt|ltd|limited|corporate|park|road|street|marg|vihar|nagar|floor|complex|bldg|building|tower|mall|plaza|avenue|lane|highway|sector|phase|block|opp\.?|near\b|mumbai|delhi|bangalore|bengaluru|hyderabad|chennai|pune|kolkata|ahmedabad|maharashtra|karnataka|gujarat|india|pincode|pin\s*code|pin\s*-\s*\d|[1-9]\d{5}\b|draft\b|invoice\b|bill\s*n[ou]|order\s*#|order\s*n[ou]|token\b|covers?\b|shift\b|pax\b|cashier\b|server\b|waiter\b|captain\b|steward\b|host\b|hostess\b|guest\b|counter\b|outlet\b|branch\b|station\b|terminal\b|table\b|foodandbeverages|f\s*&\s*b|gstin|fssai|tin\s*n[ou]|cin\b|pan\b|s\.?t\.?\s*n[ou]|vat\s*no|vat\s*reg|hsn\b|sac\b|address|phone|tel|mob|fax|email|thank|welcome|visit|www\.|\.com|\.in|duplicate|original|reprint|rare\s*print|instagram\b|facebook\b|twitter\b|social\b|e\s*&\s*o\.?e|customer\s*copy|merchant\s*copy|have\s*a\s*nice|come\s*again|feedback|rate\s*us|scan\s*to|upi|paytm|gpay|phonepe|visa\b|mastercard\b|amex\b|rupay\b|card\s*ending|chip\s*read|swipe|auth\s*code|appr\s*code|rrn\b|aid\b|mid\b|tid\b|batch\b|trace\b|txn\b|kpt\b|kot\b|dine\s*in|take\s*away|parcel|delivery|wi-?fi\s*(?:pass|key|network|code)|free\s*wi-?fi|password\b|goods\s*once\s*sold|subject\s*to|jurisdiction)\b/i;
 
 // Matches random alphanumeric codes, hashes, serial numbers, barcodes (10-18 digits), or multi-part reference codes
 const RANDOM_CODE_REGEX = /\b(?:(?=[A-Z0-9]*[0-9])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{6,}|[A-Z0-9]{2,}[-#/][A-Z0-9]{2,}[-#/][A-Z0-9]{2,}|\d{10,18})\b/i;
@@ -143,6 +144,25 @@ export function parseReceipt(ocrResult) {
     bodyStartIndex = 0;
   }
 
+  // Helper to extract price from current line or look ahead to next line if unbundled
+  const findPrice = (startIdx) => {
+    const curText = (lines[startIdx]?.text || lines[startIdx] || '').trim();
+    const curPrice = extractPrice(curText);
+    if (curPrice !== null) return { price: curPrice, usedIdx: startIdx };
+
+    // Look ahead to immediate next line if it contains a standalone price
+    if (startIdx + 1 < lines.length && !usedLines.has(startIdx + 1)) {
+      const nextText = (lines[startIdx + 1]?.text || lines[startIdx + 1] || '').trim();
+      if (!TAX_KEYWORDS.test(nextText) && !TOTAL_KEYWORDS.test(nextText) && !SUBTOTAL_KEYWORDS.test(nextText)) {
+        const nextPrice = extractPrice(nextText);
+        if (nextPrice !== null) {
+          return { price: nextPrice, usedIdx: startIdx + 1 };
+        }
+      }
+    }
+    return { price: null, usedIdx: startIdx };
+  };
+
   // ===== 2. PASS 1: EXTRACT TAXES, CHARGES & TOTALS =====
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -152,72 +172,100 @@ export function parseReceipt(ocrResult) {
 
     // Check for grand total
     if (TOTAL_KEYWORDS.test(text) && !SUBTOTAL_KEYWORDS.test(text) && !/covers|pax|items?\s*\(\d+\s*qty\)/i.test(text)) {
-      const price = extractPrice(text);
+      const { price, usedIdx } = findPrice(i);
       if (price !== null) {
         total = price;
         usedLines.add(i);
+        if (usedIdx !== i) usedLines.add(usedIdx);
       }
       continue;
     }
 
     // Check for subtotal
     if (SUBTOTAL_KEYWORDS.test(text)) {
-      const price = extractPrice(text);
+      const { price, usedIdx } = findPrice(i);
       if (price !== null) {
         subtotal = price;
         usedLines.add(i);
+        if (usedIdx !== i) usedLines.add(usedIdx);
       }
       continue;
     }
 
     // Check for service charge
     if (SERVICE_CHARGE_KEYWORDS.test(text)) {
-      const price = extractPrice(text);
-      if (price !== null) {
-        serviceCharge = price;
+      const { price, usedIdx } = findPrice(i);
+      let scPrice = price;
+      const rateMatch = text.match(/(?<![\d.])(\d{1,2}(?:\.\d{1,2})?)\s*%/);
+      if ((scPrice === null || scPrice === 0) && subtotal && rateMatch) {
+        scPrice = Math.round(subtotal * (parseFloat(rateMatch[1]) / 100));
+      }
+      if (scPrice !== null) {
+        serviceCharge = scPrice;
         usedLines.add(i);
+        if (usedIdx !== i) usedLines.add(usedIdx);
       }
       continue;
     }
 
     // Check for tax lines (exclude registration numbers like VAT NO, GSTIN, TIN NO, S.T.NO, and headers)
     if (TAX_KEYWORDS.test(text) && !/\b(vat\s*n[ou]|tin\s*n[ou]|gstin|s\.?t\.?\s*n[ou]|cin\b|pan\b|invoice\b)\b/i.test(text) && !NOISE_KEYWORDS.test(text)) {
-      const price = extractPrice(text);
-      if (price !== null && price < 5000000) {
-        let taxName = 'Tax';
-        if (text.match(/cgst|c\.g\.s\.t/i)) taxName = 'CGST';
-        else if (text.match(/sgst|s\.g\.s\.t|sgt\b|ses[t1]\b/i)) taxName = 'SGST';
-        else if (text.match(/vat/i)) taxName = 'VAT';
-        else if (text.match(/service\s*tax/i)) taxName = 'Service Tax';
-        else taxName = 'Tax';
+      const { price, usedIdx } = findPrice(i);
+      let taxPrice = price;
 
-        const rateMatch = text.match(/(?:2\.5|5|6|9|12|18|28|\d(?:\.\d+)?)\s*%/i);
-        if (rateMatch) {
+      // Extract accurate tax percentage rate e.g. 5.80%, 25%, 12.5%, 2.5%, 5%
+      const rateMatch = text.match(/(?<![\d.])(\d{1,2}(?:\.\d{1,2})?)\s*%/);
+      const rate = rateMatch ? parseFloat(rateMatch[1]) : null;
+
+      // If price was missing or 0 but we have subtotal and rate, auto-calculate:
+      if ((taxPrice === null || taxPrice === 0) && subtotal && rate) {
+        taxPrice = Math.round(subtotal * (rate / 100));
+      }
+
+      if (taxPrice !== null && taxPrice < 5000000) {
+        let taxName = 'Tax';
+        if (/vat\s+on\s+[a-z\s]+/i.test(text)) {
+          const m = text.match(/vat\s+on\s+[a-z\s]+/i);
+          taxName = m[0].toUpperCase().trim();
+        } else if (/service\s*tax/i.test(text)) {
+          taxName = 'Service Tax';
+        } else if (/c\.?g\.?s\.?t/i.test(text)) {
+          taxName = 'CGST';
+        } else if (/s\.?g\.?s\.?t/i.test(text)) {
+          taxName = 'SGST';
+        } else if (/vat/i.test(text)) {
+          taxName = 'VAT';
+        }
+
+        if (rateMatch && !taxName.includes('%')) {
           taxName += ` ${rateMatch[0].trim()}`;
         }
-        taxes.push({ name: taxName, amountPaise: price });
+        taxes.push({ name: taxName, amountPaise: taxPrice });
         usedLines.add(i);
+        if (usedIdx !== i) usedLines.add(usedIdx);
       }
       continue;
     }
 
     // Check for discount
     if (DISCOUNT_KEYWORDS.test(text)) {
-      const price = extractPrice(text);
+      const { price, usedIdx } = findPrice(i);
       if (price !== null) {
         discount = price;
         usedLines.add(i);
+        if (usedIdx !== i) usedLines.add(usedIdx);
       }
       continue;
     }
 
     // Check for round-off & adjustments
     if (ROUNDOFF_KEYWORDS.test(text)) {
-      const price = extractPrice(text);
+      const { price, usedIdx } = findPrice(i);
       if (price !== null) {
         const isNegative = /-\s*\d|minus|\(less\)/i.test(text);
         roundoff = isNegative ? -price : price;
         usedLines.add(i);
+        if (usedIdx !== i) usedLines.add(usedIdx);
       }
       continue;
     }
@@ -227,15 +275,15 @@ export function parseReceipt(ocrResult) {
   for (let i = bodyStartIndex; i < summaryStartIndex; i++) {
     if (usedLines.has(i)) continue;
     const line = lines[i];
-    const text = (line.text || '').trim();
+    const text = (line.text || line || '').trim();
 
     // Skip empty / very short lines / dashes / numbers
     if (!text || text.length < 2) continue;
     if (JUST_NUMBERS.test(text) || JUST_DASHES.test(text)) continue;
     if (TABLE_HEADER_REGEX.test(text)) continue;
 
-    // Skip metadata noise & random codes
-    if (NOISE_KEYWORDS.test(text) || RANDOM_CODE_REGEX.test(text) || DATE_TIME_REGEX.test(text)) continue;
+    // Skip metadata noise & dates (do not check RANDOM_CODE_REGEX on raw line to preserve fused prices like ALI-YOL400.00)
+    if (NOISE_KEYWORDS.test(text) || DATE_TIME_REGEX.test(text)) continue;
 
     // --- TWO-LINE ITEM CHECK (Rate line with /ea or @) ---
     // e.g. "1@ 169/ea 169.00 ~" or "! 38 20/ea 60.00" or "4 4 999.75/ea 3,999.00"
@@ -287,6 +335,36 @@ export function parseReceipt(ocrResult) {
       item.category = classifyItemFast(item.name);
       items.push(item);
       usedLines.add(i);
+      continue;
+    }
+
+    // Try consecutive two-line item: Line i (name) + Line i+1 (standalone price)
+    if (i + 1 < summaryStartIndex && !usedLines.has(i + 1)) {
+      const nextLine = lines[i + 1];
+      const nextText = (nextLine.text || nextLine || '').trim();
+      const isStandalonePrice = /^\s*(?:₹|rs\.?|inr\.?|rupees?)?\s*\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?\s*(?:[a-zA-Z]{1,2}|[^\w\s%]{1,2})?\s*$/i.test(nextText);
+      const nextPriceMatch = nextText.match(PRICE_REGEX);
+
+      // Only pair if next line is a standalone price, and current line is not financial keywords/noise
+      if (
+        isStandalonePrice &&
+        nextPriceMatch && 
+        !TAX_KEYWORDS.test(text) && 
+        !TOTAL_KEYWORDS.test(text) && 
+        !SUBTOTAL_KEYWORDS.test(text) &&
+        !NOISE_KEYWORDS.test(text)
+      ) {
+        const combinedText = `${text} ${nextPriceMatch[1]}`;
+        const combinedItem = parseLineItem(combinedText, line);
+        if (combinedItem) {
+          combinedItem.category = classifyItemFast(combinedItem.name);
+          items.push(combinedItem);
+          usedLines.add(i);
+          usedLines.add(i + 1);
+          i++; // Skip the paired price line
+          continue;
+        }
+      }
     }
   }
 
@@ -326,22 +404,25 @@ function parseLineItem(text, ocrLine) {
     const unitPrice = parsePaise(qptMatch[2]);
     const lineTotal = parsePaise(qptMatch[3]);
     
-    // Extract item name (everything before the numbers)
-    const nameEnd = text.indexOf(qptMatch[0]);
-    let name = text.substring(0, nameEnd).trim();
-    name = cleanItemName(name);
-    
-    if (name && lineTotal > 0 && !NOISE_KEYWORDS.test(name) && !RANDOM_CODE_REGEX.test(name) && /[a-zA-Z]/.test(name)) {
-      return {
-        id: generateId(),
-        name,
-        qty,
-        unitPricePaise: unitPrice,
-        totalPaise: lineTotal,
-        category: classifyItemFast(name),
-        assignees: [],
-        confidence: getLineConfidence(ocrLine),
-      };
+    // Verify quantity is sensible and multiplication holds
+    if (qty > 0 && qty <= 100 && Math.abs(qty * unitPrice - lineTotal) <= 200) {
+      // Extract item name (everything before the numbers)
+      const nameEnd = text.indexOf(qptMatch[0]);
+      let name = text.substring(0, nameEnd).trim();
+      name = cleanItemName(name);
+      
+      if (name && lineTotal > 0 && !NOISE_KEYWORDS.test(name) && !RANDOM_CODE_REGEX.test(name) && /[a-zA-Z]/.test(name)) {
+        return {
+          id: generateId(),
+          name,
+          qty,
+          unitPricePaise: unitPrice,
+          totalPaise: lineTotal,
+          category: classifyItemFast(name),
+          assignees: [],
+          confidence: getLineConfidence(ocrLine),
+        };
+      }
     }
   }
 
@@ -488,8 +569,8 @@ function extractPrice(text) {
     const last = anyMatches[anyMatches.length - 1];
     return parsePaise(last[1]);
   }
-  // Fallback: look for trailing numeric pattern (e.g., "730.00" or "803")
-  const numMatch = text.match(/(?<!\d)(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)\s*(?:[a-zA-Z]{1,5}|[^\w\s]{1,5})?\s*$/);
+  // Fallback: look for trailing numeric pattern (never followed by %)
+  const numMatch = text.match(/(?<!\d)(\d{1,7}(?:[,]\d{3})*(?:\.\d{1,2})?)(?!\s*%)\s*(?:[a-zA-Z]{1,5}|[^\w\s%]{1,5})?\s*$/);
   if (numMatch) {
     return parsePaise(numMatch[1]);
   }

@@ -1321,6 +1321,11 @@ body {
   padding: 6px 14px;
   font-size: 0.8rem;
 }
+.btn-xs {
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  border-radius: var(--radius-sm);
+}
 .btn-lg {
   padding: 12px 24px;
   font-size: 1rem;
