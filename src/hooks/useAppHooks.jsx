@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
+import Tesseract from 'tesseract.js';
 import * as db from '../db/database.js';
 
 // ===== TOAST CONTEXT =====
@@ -125,7 +126,6 @@ export function useOCR() {
     setStatus('Initializing OCR engine...');
 
     try {
-      const Tesseract = await import('tesseract.js');
       const langPath = typeof window !== 'undefined' ? window.location.origin : '.';
 
       if (!cachedWorker) {

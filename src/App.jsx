@@ -111,6 +111,37 @@ function ProfileModal({ onClose }) {
   );
 }
 
+// ===== SCANNER LOGO ICON (Brackets + Document + Laser Beam) =====
+function ScannerIcon({ size = 18, color = 'currentColor', beamColor = '#38bdf8', className = '' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}
+      aria-hidden="true"
+    >
+      {/* 4 Optical Corner Brackets */}
+      <path d="M4 8V5C4 4.44772 4.44772 4 5 4H8" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M16 4H19C19.5523 4 20 4.44772 20 5V8" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M4 16V19C4 19.5523 4.44772 20 5 20H8" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M16 20H19C19.5523 20 20 19.5523 20 19V16" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+
+      {/* Mini Receipt Document inside */}
+      <rect x="7" y="6" width="10" height="12" rx="1.5" stroke={color} strokeWidth="1.4" opacity="0.85" />
+      <line x1="9.5" y1="9" x2="14.5" y2="9" stroke={color} strokeWidth="1.3" strokeLinecap="round" opacity="0.8" />
+      <line x1="9.5" y1="12" x2="13" y2="12" stroke={color} strokeWidth="1.3" strokeLinecap="round" opacity="0.8" />
+      <line x1="9.5" y1="15" x2="14.5" y2="15" stroke={color} strokeWidth="1.3" strokeLinecap="round" opacity="0.8" />
+
+      {/* Glowing Horizontal Laser Scan Line */}
+      <line x1="3" y1="12" x2="21" y2="12" stroke={beamColor} strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // ===== MOBILE BOTTOM NAVIGATION BAR (PHONE DOCK) =====
 function MobileBottomNav({ onOpenProfile, onCreateGroup }) {
   const location = useLocation();
@@ -157,10 +188,10 @@ function MobileBottomNav({ onOpenProfile, onCreateGroup }) {
           type="button"
           className="mobile-nav-fab"
           onClick={() => navigate(`/group/${currentGroupId}/scan`)}
-          title="Scan Receipt with Camera"
+          title="Scan Receipt with Scanner"
           aria-label="Scan Receipt"
         >
-          <span className="mobile-fab-icon">📸</span>
+          <ScannerIcon size={24} color="#ffffff" beamColor="#38bdf8" />
         </button>
       </div>
 
@@ -409,14 +440,15 @@ function Dashboard({ showCreate: externalShowCreate, setShowCreate: externalSetS
           Efficiently manage shared expenses, scan receipts with OCR, and settle debts instantly.
         </p>
 
-        {/* Blue Pill CTA Button */}
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <button className="hero-cta-btn" onClick={handleScanReceipt}>
-            <span>📷</span>
-            <span>Scan Receipt Free</span>
+        {/* Hero CTA Button Group */}
+        <div className="hero-cta-wrap">
+          <button className="hero-cta-btn" onClick={handleScanReceipt} aria-label="Scan Receipt">
+            <ScannerIcon size={18} color="#ffffff" beamColor="#93c5fd" />
+            <span>Scan Receipt</span>
           </button>
-          <button className="btn btn-secondary" style={{ padding: '13px 24px' }} onClick={() => setShowCreate(true)}>
-            + Create Group
+          <button className="hero-create-btn" onClick={() => setShowCreate(true)} aria-label="Create Group">
+            <span style={{ fontSize: '1.05rem', lineHeight: 1, fontWeight: 700 }}>+</span>
+            <span>Create Group</span>
           </button>
         </div>
 
@@ -625,8 +657,9 @@ function RealGroupCard({ group, onClick, onDelete, onScan }) {
           <strong>{formatCurrency(totalSpent)}</strong> tracked ({expenseCount} bills)
         </div>
         <div style={{ display: 'flex', gap: 8 }} onClick={e => e.stopPropagation()}>
-          <button className="btn btn-secondary btn-sm" onClick={onScan}>
-            📷 Scan
+          <button className="btn btn-secondary btn-sm" onClick={onScan} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <ScannerIcon size={14} color="currentColor" beamColor="#38bdf8" />
+            <span>Scan</span>
           </button>
           <button className="btn btn-primary btn-sm" onClick={onClick}>
             Open →
@@ -662,9 +695,9 @@ function QuickAddFriendModal({ group, onClose, onAdded }) {
     onAdded();
   };
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 2500 }}>
+      <div className="modal-content animate-scaleIn" onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Add New Friend</h2>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
@@ -690,7 +723,8 @@ function QuickAddFriendModal({ group, onClose, onAdded }) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -724,9 +758,9 @@ function CreateGroupModal({ onClose, onCreate }) {
     ]);
   };
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 2500 }}>
+      <div className="modal-content animate-scaleIn" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Create Group</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
@@ -741,22 +775,22 @@ function CreateGroupModal({ onClose, onCreate }) {
               ✨ Fill Sample Hostel Wing
             </button>
           </div>
-          <div>
+          <div style={{ marginBottom: 14 }}>
             <label className="label">Group Name</label>
             <input className="input" placeholder="e.g., Night Canteen Gang" value={name}
               onChange={e => setName(e.target.value)} autoFocus />
           </div>
           <div>
-            <label className="label">Members</label>
+            <label className="label">Members ({members.length})</label>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input className="input" placeholder="Member name" value={memberName}
+              <input className="input" placeholder="Member name (e.g. Rahul)" value={memberName}
                 onChange={e => setMemberName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addMember(); }} />
-              <button className="btn btn-secondary" onClick={addMember}>Add</button>
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addMember(); } }} />
+              <button type="button" className="btn btn-secondary" onClick={addMember}>Add</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               {members.map(m => (
-                <span key={m.id} className="badge badge-violet" style={{ gap: 6, cursor: 'pointer' }}
+                <span key={m.id} className="badge badge-violet" style={{ gap: 6, cursor: 'pointer', padding: '5px 10px' }}
                   onClick={() => removeMember(m.id)}>
                   <span className="avatar avatar-sm" style={{ background: m.color, width: 20, height: 20, fontSize: '0.55rem' }}>
                     {getInitials(m.name)}
@@ -765,17 +799,28 @@ function CreateGroupModal({ onClose, onCreate }) {
                 </span>
               ))}
             </div>
+            {members.length < 2 && (
+              <div style={{ fontSize: '0.76rem', color: 'var(--ink-muted)', marginTop: 8 }}>
+                💡 Tip: Add at least 2 members (or tap "Fill Sample Hostel Wing" above) to create group.
+              </div>
+            )}
           </div>
         </div>
-        <div className="modal-footer">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={!name.trim() || members.length < 2}
-            onClick={() => onCreate(name.trim(), members)}>
+        <div className="modal-footer" style={{ display: 'flex', gap: 10 }}>
+          <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ flex: 2, padding: '12px 20px', fontWeight: 700 }}
+            disabled={!name.trim() || members.length < 2}
+            onClick={() => onCreate(name.trim(), members)}
+          >
             Create Group
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1806,7 +1851,8 @@ Total: 756.00`,
           onClick={() => setScannerTab('photo')}
           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
         >
-          📸 Photo / Upload Scan
+          <ScannerIcon size={16} color="currentColor" beamColor="#93c5fd" />
+          <span>Scanner / Upload</span>
         </button>
         <button
           type="button"

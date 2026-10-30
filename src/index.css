@@ -237,13 +237,21 @@ body {
   line-height: 1.6;
 }
 
+.hero-cta-wrap {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+}
+
 .hero-cta-btn {
   background: var(--accent-blue);
   color: #ffffff;
   border: none;
-  padding: 13px 32px;
+  padding: 12px 28px;
   border-radius: var(--radius-pill);
-  font-size: 0.98rem;
+  font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 6px 20px rgba(26, 115, 232, 0.35);
@@ -257,6 +265,28 @@ body {
   background: var(--accent-blue-hover);
   transform: translateY(-2px);
   box-shadow: 0 10px 24px rgba(26, 115, 232, 0.4);
+}
+
+.hero-create-btn {
+  background: #ffffff;
+  color: var(--ink-primary);
+  border: 1.5px solid #e2e8f0;
+  padding: 12px 24px;
+  border-radius: var(--radius-pill);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration: none;
+}
+.hero-create-btn:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
 /* Floating Accessory Cards (Top-Left, Top-Right, Bottom-Left, Bottom-Right) */
@@ -1344,7 +1374,7 @@ body {
   background: rgba(17, 24, 39, 0.45);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  z-index: 200;
+  z-index: 2500;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1561,7 +1591,45 @@ input[type=number] {
     font-size: 1.85rem;
   }
   .hero-showcase {
-    padding: 30px 12px 40px;
+    padding: 24px 12px 32px;
+  }
+  /* Compact phone sizing for Scan and Create Group buttons */
+  .hero-cta-wrap {
+    width: 100%;
+    max-width: 320px;
+    margin: 8px auto 0;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+  }
+  .hero-cta-btn {
+    padding: 8px 14px !important;
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    border-radius: 20px !important;
+    gap: 6px !important;
+    min-height: 38px !important;
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    box-shadow: 0 3px 10px rgba(26, 115, 232, 0.28) !important;
+  }
+  .hero-create-btn {
+    padding: 8px 12px !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    border-radius: 20px !important;
+    gap: 5px !important;
+    min-height: 38px !important;
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    border: 1.5px solid #e2e8f0 !important;
+    background: #ffffff !important;
+  }
+  .hero-cta-btn:active, .hero-create-btn:active {
+    transform: scale(0.96) !important;
   }
   .groups-bento-grid {
     grid-template-columns: 1fr;
@@ -1585,15 +1653,36 @@ input[type=number] {
   .modal-overlay {
     align-items: flex-end;
     padding: 0;
+    z-index: 2500 !important;
   }
   .modal-content {
     width: 100% !important;
     max-width: 100% !important;
+    max-height: 88dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
     border-radius: 24px 24px 0 0 !important;
-    padding: 24px 18px !important;
-    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 22px 18px !important;
+    padding-bottom: max(24px, env(safe-area-inset-bottom)) !important;
     margin: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
     animation: slideUpSheet 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.3) !important;
+  }
+  .modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    margin-bottom: 14px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-footer {
+    flex-shrink: 0;
+    padding-top: 12px;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    gap: 10px;
+    width: 100%;
   }
   @keyframes slideUpSheet {
     from { transform: translateY(100%); }
@@ -1895,12 +1984,12 @@ input[type=number] {
   /* Phone Mobile Camera Button */
   .btn-mobile-cam {
     width: 100%;
-    padding: 14px 20px !important;
-    font-size: 1rem !important;
+    padding: 10px 18px !important;
+    font-size: 0.88rem !important;
     font-weight: 700 !important;
     border-radius: var(--radius-pill) !important;
     background: linear-gradient(135deg, #1a73e8, #0056b3) !important;
-    box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4) !important;
+    box-shadow: 0 4px 14px rgba(26, 115, 232, 0.35) !important;
     display: flex;
     align-items: center;
     justify-content: center;
