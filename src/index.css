@@ -1530,23 +1530,43 @@ input[type=number] {
 @media (max-width: 640px) {
   body {
     padding: 0;
+    padding-bottom: 74px !important;
   }
   .browser-canvas-frame {
     border-radius: 0;
     min-height: 100dvh;
     box-shadow: none;
   }
+  .canvas-content {
+    padding: 16px 12px;
+    padding-bottom: 90px !important;
+  }
   .nav-links-row {
     display: none;
   }
+  .nav-desktop-only {
+    display: none !important;
+  }
+  .nav-user-label {
+    display: none !important;
+  }
+  .canvas-navbar {
+    height: 56px;
+    padding: 0 14px;
+  }
   .hero-main-h1 {
-    font-size: 1.9rem;
+    font-size: 1.85rem;
+  }
+  .hero-showcase {
+    padding: 30px 12px 40px;
   }
   .groups-bento-grid {
     grid-template-columns: 1fr;
+    gap: 14px;
   }
   .tabs {
     width: 100%;
+    overflow-x: auto;
   }
   .settlement-card {
     flex-direction: column;
@@ -1557,4 +1577,316 @@ input[type=number] {
   .settlement-actions {
     justify-content: center;
   }
+
+  /* Bottom sheet modal animation on mobile */
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 24px 24px 0 0 !important;
+    padding: 24px 18px !important;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+    margin: 0 !important;
+    animation: slideUpSheet 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+  @keyframes slideUpSheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
 }
+
+/* ===== PHONE COMPONENT: MOBILE BOTTOM NAVIGATION DOCK ===== */
+.mobile-bottom-nav {
+  display: none;
+}
+@media (max-width: 640px) {
+  .mobile-bottom-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.06);
+    z-index: 1000;
+    padding: 0 6px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: transparent;
+    border: none;
+    color: var(--ink-muted);
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 12px;
+    transition: all 0.15s ease;
+    flex: 1;
+    min-width: 0;
+    touch-action: manipulation;
+  }
+  .mobile-nav-item:active {
+    transform: scale(0.92);
+  }
+  .mobile-nav-item.active {
+    color: var(--accent-blue);
+  }
+  .mobile-nav-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  .mobile-nav-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+  }
+  .mobile-nav-fab-wrap {
+    position: relative;
+    top: -14px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0 2px;
+  }
+  .mobile-nav-fab {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1a73e8, #0056b3);
+    color: #ffffff;
+    border: 3.5px solid #ffffff;
+    box-shadow: 0 8px 24px rgba(26, 115, 232, 0.45), 0 2px 6px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.45rem;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    touch-action: manipulation;
+  }
+  .mobile-nav-fab:active {
+    transform: scale(0.90);
+  }
+}
+
+/* ===== PHONE COMPONENT: MOBILE ITEM CARDS IN REVIEW EDITOR ===== */
+.mobile-item-cards-list {
+  display: none;
+}
+@media (max-width: 640px) {
+  .review-table-container {
+    display: none !important;
+  }
+  .mobile-item-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .mobile-item-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: all 0.15s ease;
+  }
+  .mobile-item-card:focus-within {
+    border-color: var(--accent-blue);
+    box-shadow: 0 4px 16px rgba(26, 115, 232, 0.12);
+  }
+  .mobile-item-top-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .mobile-item-name-col {
+    flex: 1;
+    min-width: 0;
+  }
+  .mobile-item-name-input {
+    width: 100%;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ink-primary);
+    border: none;
+    background: transparent;
+    padding: 3px 0;
+    outline: none;
+  }
+  .mobile-item-name-input:focus {
+    border-bottom: 2px solid var(--accent-blue);
+  }
+  .mobile-item-del-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 4px;
+    color: #ef4444;
+    border-radius: 8px;
+    touch-action: manipulation;
+  }
+  .mobile-item-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 12px;
+  }
+  .mobile-stepper {
+    display: flex;
+    align-items: center;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 2px 4px;
+  }
+  .mobile-step-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--ink-primary);
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+  }
+  .mobile-step-btn:active {
+    background: #e2e8f0;
+  }
+  .mobile-price-group {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .mobile-total-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  .mobile-assignees-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 6px;
+    border-top: 1px dashed #f1f5f9;
+  }
+  .mobile-assignees-scroll {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 2px 0;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mobile-assignees-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .mobile-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px 5px 6px;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+    touch-action: manipulation;
+  }
+  .mobile-chip:active {
+    transform: scale(0.94);
+  }
+  .mobile-chip-avatar {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    color: #ffffff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mobile-chip-all {
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: var(--ink-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  /* Sticky footer on phone screen */
+  .mobile-sticky-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: fixed;
+    bottom: 64px;
+    left: 0;
+    right: 0;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 10px 18px;
+    border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.07);
+    z-index: 900;
+  }
+  .mobile-sticky-info {
+    display: flex;
+    flex-direction: column;
+  }
+  .mobile-sticky-subtext {
+    font-size: 0.7rem;
+    color: var(--ink-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .mobile-sticky-amount {
+    font-family: var(--font-mono);
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--ink-primary);
+  }
+  .mobile-sticky-action-btn {
+    padding: 10px 22px;
+    font-size: 0.92rem;
+    border-radius: var(--radius-pill);
+    box-shadow: 0 4px 14px rgba(26, 115, 232, 0.35);
+    touch-action: manipulation;
+  }
+}
+

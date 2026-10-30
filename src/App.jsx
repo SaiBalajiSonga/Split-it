@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { HashRouter, Routes, Route, useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
+import { HashRouter, Routes, Route, useNavigate, useParams, useSearchParams, Link, useLocation } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { ToastProvider, useToast, useGroups, useExpenses, useOCR, useCamera } from './hooks/useAppHooks';
 import { parseReceipt, validateTotal, cleanItemName } from './logic/receiptParser';
@@ -15,13 +15,17 @@ import './index.css';
 // ===== MAIN APP =====
 export default function App() {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   return (
     <HashRouter>
       <ToastProvider>
         {/* Floating Browser Canvas Window (Matching ChronoTask / Reference) */}
         <div className="browser-canvas-frame">
-          <Navbar onCreateGroup={() => setShowCreateModal(true)} />
+          <Navbar
+            onCreateGroup={() => setShowCreateModal(true)}
+            onOpenProfile={() => setShowProfileModal(true)}
+          />
           <main className="canvas-content">
             <Routes>
               <Route path="/" element={<Dashboard showCreate={showCreateModal} setShowCreate={setShowCreateModal} />} />
@@ -33,7 +37,14 @@ export default function App() {
               <Route path="*" element={<Dashboard showCreate={showCreateModal} setShowCreate={setShowCreateModal} />} />
             </Routes>
           </main>
+
+          {/* Mobile Bottom Navigation Bar (Phone-only dock) */}
+          <MobileBottomNav
+            onOpenProfile={() => setShowProfileModal(true)}
+            onCreateGroup={() => setShowCreateModal(true)}
+          />
         </div>
+        {showProfileModal && <ProfileModal onClose={() => setShowProfileModal(false)} />}
       </ToastProvider>
     </HashRouter>
   );
@@ -100,10 +111,83 @@ function ProfileModal({ onClose }) {
   );
 }
 
-// ===== MINIMAL CANVAS NAVBAR (Matching Reference) =====
-function Navbar({ onCreateGroup }) {
+// ===== MOBILE BOTTOM NAVIGATION BAR (PHONE DOCK) =====
+function MobileBottomNav({ onOpenProfile, onCreateGroup }) {
+  const location = useLocation();
   const navigate = useNavigate();
-  const [showProfile, setShowProfile] = useState(false);
+
+  const isHome = location.pathname === '/' || location.pathname === '';
+  const isScan = location.pathname.includes('/scan');
+  const isReview = location.pathname.includes('/review');
+  const isGroup = location.pathname.startsWith('/group/') && !isScan && !isReview;
+  const isSettleTab = location.search.includes('tab=settle');
+
+  const groupMatch = location.pathname.match(/\/group\/([^/]+)/);
+  const currentGroupId = groupMatch ? groupMatch[1] : 'jugadu-cafe';
+
+  return (
+    <nav className="mobile-bottom-nav" aria-label="Mobile Navigation">
+      <button
+        type="button"
+        className={`mobile-nav-item ${isHome ? 'active' : ''}`}
+        onClick={() => navigate('/')}
+      >
+        <span className="mobile-nav-icon">👥</span>
+        <span className="mobile-nav-label">Groups</span>
+      </button>
+
+      <button
+        type="button"
+        className={`mobile-nav-item ${isGroup && !isSettleTab ? 'active' : ''}`}
+        onClick={() => {
+          if (groupMatch) {
+            navigate(`/group/${currentGroupId}`);
+          } else {
+            navigate('/');
+          }
+        }}
+      >
+        <span className="mobile-nav-icon">📊</span>
+        <span className="mobile-nav-label">Activity</span>
+      </button>
+
+      {/* Floating Center Action Button (FAB) for Instant Bill Scan */}
+      <div className="mobile-nav-fab-wrap">
+        <button
+          type="button"
+          className="mobile-nav-fab"
+          onClick={() => navigate(`/group/${currentGroupId}/scan`)}
+          title="Scan Receipt with Camera"
+          aria-label="Scan Receipt"
+        >
+          <span className="mobile-fab-icon">📸</span>
+        </button>
+      </div>
+
+      <button
+        type="button"
+        className={`mobile-nav-item ${isSettleTab ? 'active' : ''}`}
+        onClick={() => navigate(`/group/${currentGroupId}?tab=settle`)}
+      >
+        <span className="mobile-nav-icon">⚡</span>
+        <span className="mobile-nav-label">Settle</span>
+      </button>
+
+      <button
+        type="button"
+        className="mobile-nav-item"
+        onClick={onOpenProfile}
+      >
+        <span className="mobile-nav-icon">👤</span>
+        <span className="mobile-nav-label">UPI</span>
+      </button>
+    </nav>
+  );
+}
+
+// ===== MINIMAL CANVAS NAVBAR (Matching Reference) =====
+function Navbar({ onCreateGroup, onOpenProfile }) {
+  const navigate = useNavigate();
   const [myName, setMyName] = useState(localStorage.getItem('splitsmart_my_name') || '');
 
   useEffect(() => {
@@ -160,18 +244,19 @@ function Navbar({ onCreateGroup }) {
       <div className="nav-actions-row">
         <button
           className="btn btn-ghost btn-sm"
-          onClick={() => setShowProfile(true)}
+          onClick={onOpenProfile}
           title="Set your name and default UPI ID"
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, border: '1px solid var(--border-card)' }}
         >
-          👤 {myName ? `${myName} (You)` : 'My Profile & UPI'}
+          👤 <span className="nav-user-label">{myName ? `${myName} (You)` : 'My Profile & UPI'}</span>
         </button>
-        <ExportImportButton />
+        <div className="nav-desktop-only">
+          <ExportImportButton />
+        </div>
         <button className="btn btn-secondary btn-sm" onClick={onCreateGroup}>
-          + New Group
+          <span className="btn-plus-icon">+</span> <span className="nav-create-label">New Group</span>
         </button>
       </div>
-      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} />}
     </nav>
   );
 }
@@ -2469,6 +2554,135 @@ function ReviewEditor() {
                 </table>
               </div>
 
+              {/* Phone-optimized Item Cards (visible on phones <= 640px) */}
+              <div className="mobile-item-cards-list">
+                {items.map((item, idx) => (
+                  <div key={item.id} className="mobile-item-card">
+                    <div className="mobile-item-top-row">
+                      <div className="mobile-item-name-col">
+                        <input
+                          className="mobile-item-name-input"
+                          value={item.name}
+                          placeholder="Item name"
+                          onChange={e => updateItem(idx, 'name', e.target.value)}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                          <select
+                            className={`category-pill ${CATEGORIES[item.category]?.cssClass || 'category-other'}`}
+                            value={item.category || 'Other'}
+                            onChange={e => updateItem(idx, 'category', e.target.value)}
+                            style={{ cursor: 'pointer', border: 'none', padding: '2px 8px', borderRadius: 12, fontSize: '0.72rem', fontWeight: 600 }}
+                          >
+                            {Object.keys(CATEGORIES).map(cat => (
+                              <option key={cat} value={cat} style={{ background: '#1c1b22', color: '#fff' }}>
+                                {CATEGORIES[cat]?.emoji} {cat}
+                              </option>
+                            ))}
+                          </select>
+                          {item.confidence < 70 && (
+                            <span className="low-confidence" style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
+                              ⚠️ Low conf
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="mobile-item-del-btn"
+                        onClick={() => deleteItem(idx)}
+                        aria-label="Delete item"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+
+                    <div className="mobile-item-controls-row">
+                      {/* Touch Stepper for Quantity */}
+                      <div className="mobile-stepper">
+                        <button
+                          type="button"
+                          className="mobile-step-btn"
+                          onClick={() => updateItem(idx, 'qty', Math.max(1, (item.qty || 1) - 1))}
+                          aria-label="Decrease quantity"
+                        >
+                          −
+                        </button>
+                        <QtyInput
+                          value={item.qty}
+                          onChange={q => updateItem(idx, 'qty', q)}
+                          style={{ width: 34, textAlign: 'center', border: 'none', background: 'transparent', fontWeight: 700, padding: 0 }}
+                        />
+                        <button
+                          type="button"
+                          className="mobile-step-btn"
+                          onClick={() => updateItem(idx, 'qty', (item.qty || 1) + 1)}
+                          aria-label="Increase quantity"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Unit Price Input */}
+                      <div className="mobile-price-group">
+                        <span style={{ color: 'var(--ink-muted)', fontSize: '0.85rem' }}>₹</span>
+                        <PriceInput
+                          valuePaise={item.unitPricePaise}
+                          onChange={p => updateItem(idx, 'unitPricePaise', p)}
+                          style={{ width: 78, textAlign: 'right', fontWeight: 600 }}
+                        />
+                      </div>
+
+                      {/* Total */}
+                      <div className="mobile-total-badge">
+                        <span style={{ fontSize: '0.68rem', color: 'var(--ink-muted)', textTransform: 'uppercase' }}>Line Total</span>
+                        <span className="input-mono" style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--ink-primary)' }}>
+                          ₹{(item.totalPaise / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Member Assignees Strip */}
+                    {group && group.members && group.members.length > 0 && (
+                      <div className="mobile-assignees-row">
+                        <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--ink-secondary)' }}>Split:</span>
+                        <div className="mobile-assignees-scroll">
+                          {group.members.map((m, i) => {
+                            const isAssigned = item.assignees?.includes(m.id);
+                            const mColor = m.color || getMemberColor(i);
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                className={`mobile-chip ${isAssigned ? 'active' : ''}`}
+                                style={{
+                                  borderColor: isAssigned ? mColor : '#e5e7eb',
+                                  background: isAssigned ? `${mColor}18` : '#f8fafc',
+                                  color: isAssigned ? mColor : 'var(--ink-secondary)'
+                                }}
+                                onClick={() => toggleAssignee(idx, m.id)}
+                              >
+                                <span className="mobile-chip-avatar" style={{ background: mColor }}>
+                                  {getInitials(m.name)}
+                                </span>
+                                <span>{m.name.split(' ')[0]}</span>
+                                {isAssigned && <span style={{ fontSize: '0.65rem' }}>✓</span>}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            className="mobile-chip-all"
+                            onClick={() => assignAllToItem(idx)}
+                          >
+                            All
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
               {/* Tax / charges section */}
               <div style={{ marginTop: 16, padding: 18, background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -2585,6 +2799,22 @@ function ReviewEditor() {
                   Next: Assign Items →
                 </button>
               </div>
+
+              {/* Phone Sticky Bottom Floating Bar (shown when items exist) */}
+              {items.length > 0 && (
+                <div className="mobile-sticky-footer">
+                  <div className="mobile-sticky-info">
+                    <span className="mobile-sticky-subtext">Total ({items.length} items)</span>
+                    <span className="mobile-sticky-amount">₹{(total / 100).toFixed(2)}</span>
+                  </div>
+                  <button
+                    className="btn btn-primary mobile-sticky-action-btn"
+                    onClick={() => setStep('assign')}
+                  >
+                    Next: Assign →
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2750,6 +2980,20 @@ function ReviewEditor() {
             <button className="btn btn-ghost" onClick={() => setStep('review')}>← Back</button>
             <button className="btn btn-primary" onClick={() => setStep('split')}>
               Next: View Split →
+            </button>
+          </div>
+
+          {/* Phone Sticky Bottom Floating Bar for Assign Step */}
+          <div className="mobile-sticky-footer">
+            <div className="mobile-sticky-info">
+              <span className="mobile-sticky-subtext">Total Amount</span>
+              <span className="mobile-sticky-amount">₹{(total / 100).toFixed(2)}</span>
+            </div>
+            <button
+              className="btn btn-primary mobile-sticky-action-btn"
+              onClick={() => setStep('split')}
+            >
+              Review Split →
             </button>
           </div>
         </div>
