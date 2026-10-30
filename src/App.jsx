@@ -2537,23 +2537,6 @@ function ReviewEditor() {
                   <button className="btn btn-sm btn-secondary" onClick={handleReparseOCR} title="Re-parse with smart heuristics">
                     ⚡ Re-parse
                   </button>
-                  <button
-                    className="btn btn-sm btn-secondary"
-                    onClick={async () => {
-                      toast('🤖 Running MobileBERT Zero-Shot AI Categorization...', 'info');
-                      try {
-                        const { classifyItems } = await import('./logic/categorizer');
-                        const updated = await classifyItems(items);
-                        setItems(updated);
-                        toast('✨ All items categorized with MobileBERT!', 'success');
-                      } catch (err) {
-                        toast('AI Categorizer: ' + err.message, 'warning');
-                      }
-                    }}
-                    title="Classify items with Xenova/mobilebert-uncased-mnli"
-                  >
-                    🤖 AI Categorize
-                  </button>
                   <button className="btn btn-sm btn-primary" onClick={addItem}>+ Add Item</button>
                 </div>
               </div>
