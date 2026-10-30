@@ -1279,6 +1279,7 @@ function ReviewEditor() {
   const [taxes, setTaxes] = useState([]);
   const [serviceCharge, setServiceCharge] = useState(0);
   const [discount, setDiscount] = useState(0);
+  const [roundoff, setRoundoff] = useState(0);
   const [total, setTotal] = useState(0);
   const [receiptImage, setReceiptImage] = useState(null);
   const [validation, setValidation] = useState(null);
@@ -1287,7 +1288,33 @@ function ReviewEditor() {
   const [description, setDescription] = useState('');
   const [splitMode, setSplitMode] = useState('itemized');
   const [customSplits, setCustomSplits] = useState({});
+  const [showRawOCR, setShowRawOCR] = useState(false);
   const { addExpense } = useExpenses(groupId);
+
+  const handleReparseOCR = () => {
+    const ocrStr = sessionStorage.getItem('ocrResult');
+    if (!ocrStr) {
+      toast('No raw OCR text found. Open "Raw OCR" to paste receipt lines.', 'warning');
+      return;
+    }
+    try {
+      const rawOcr = JSON.parse(ocrStr);
+      const reParsed = parseReceipt(rawOcr);
+      if (reParsed.items && reParsed.items.length > 0) {
+        setItems(reParsed.items);
+        if (reParsed.taxes && reParsed.taxes.length > 0) setTaxes(reParsed.taxes);
+        if (reParsed.serviceCharge !== undefined) setServiceCharge(reParsed.serviceCharge || 0);
+        if (reParsed.discount !== undefined) setDiscount(reParsed.discount || 0);
+        if (reParsed.roundoff !== undefined) setRoundoff(reParsed.roundoff || 0);
+        if (reParsed.total) setTotal(reParsed.total);
+        toast(`Parsed ${reParsed.items.length} items successfully!`, 'success');
+      } else {
+        toast('No items detected in raw OCR text', 'warning');
+      }
+    } catch (err) {
+      toast('Failed to re-parse: ' + err.message, 'error');
+    }
+  };
 
   useEffect(() => {
     dbOps.getGroup(groupId).then(g => {
@@ -1303,17 +1330,19 @@ function ReviewEditor() {
       let parsed = JSON.parse(parsedStr);
       let loadedItems = parsed.items || [];
 
-      // Auto re-parse if previous parse produced 0 items
-      if (loadedItems.length === 0 && ocrStr) {
+      // Auto re-parse if stored ocrResult can extract clean items or purge bogus headers
+      if (ocrStr) {
         try {
           const rawOcr = JSON.parse(ocrStr);
           const reParsed = parseReceipt(rawOcr);
-          if (reParsed.items && reParsed.items.length > 0) {
+          const hasBogusHeader = loadedItems.some(i => /table|stl/i.test(i.name));
+          if (reParsed.items && (reParsed.items.length > loadedItems.length || hasBogusHeader)) {
             loadedItems = reParsed.items;
-            parsed.taxes = reParsed.taxes || [];
-            parsed.serviceCharge = reParsed.serviceCharge || 0;
-            parsed.discount = reParsed.discount || 0;
-            parsed.total = reParsed.total || 0;
+            if (reParsed.taxes && reParsed.taxes.length > 0) parsed.taxes = reParsed.taxes;
+            if (reParsed.serviceCharge !== undefined) parsed.serviceCharge = reParsed.serviceCharge;
+            if (reParsed.discount !== undefined) parsed.discount = reParsed.discount;
+            if (reParsed.roundoff !== undefined) parsed.roundoff = reParsed.roundoff;
+            if (reParsed.total) parsed.total = reParsed.total;
           }
         } catch { /* ignore fallback error */ }
       }
@@ -1322,16 +1351,17 @@ function ReviewEditor() {
       setTaxes(parsed.taxes || []);
       setServiceCharge(parsed.serviceCharge || 0);
       setDiscount(parsed.discount || 0);
+      setRoundoff(parsed.roundoff || 0);
       setTotal(parsed.total || 0);
     }
     if (imgStr) setReceiptImage(imgStr);
   }, [groupId]);
 
-  // Validate whenever items/taxes change
+  // Validate whenever items/taxes/charges change
   useEffect(() => {
-    const receipt = { items, taxes, serviceCharge, discount, total };
+    const receipt = { items, taxes, serviceCharge, discount, roundoff, total };
     setValidation(validateTotal(receipt));
-  }, [items, taxes, serviceCharge, discount, total]);
+  }, [items, taxes, serviceCharge, discount, roundoff, total]);
 
   const updateItem = (idx, field, value) => {
     const updated = [...items];
@@ -1395,7 +1425,7 @@ function ReviewEditor() {
 
     if (splitMode === 'itemized') {
       if (hasUnassigned) { toast('Please assign all items', 'warning'); return; }
-      const result = calculateItemizedSplit({ items, taxes, serviceCharge, discount });
+      const result = calculateItemizedSplit({ items, taxes, serviceCharge, discount, roundoff });
       splits = result.splits;
       totalPaise = Object.values(splits).reduce((a, b) => a + b, 0);
     } else if (splitMode === 'equal') {
@@ -1472,14 +1502,33 @@ function ReviewEditor() {
             {receiptImage && (
               <div className="review-image">
                 <img src={receiptImage} alt="Receipt" />
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, justifyContent: 'center' }}>
+                  <button className="btn btn-sm btn-ghost" onClick={() => navigate(`/group/${groupId}/scan`)}>
+                    📸 Re-scan
+                  </button>
+                  <button className="btn btn-sm btn-secondary" onClick={handleReparseOCR}>
+                    ⚡ Re-parse Text
+                  </button>
+                </div>
               </div>
             )}
             
             {/* Parsed items table */}
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Parsed Items</h3>
-                <button className="btn btn-sm btn-secondary" onClick={addItem}>+ Add Item</button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Parsed Items</h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({items.length})</span>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-sm btn-ghost" onClick={() => setShowRawOCR(true)} title="View & edit raw OCR text">
+                    📜 Raw OCR
+                  </button>
+                  <button className="btn btn-sm btn-secondary" onClick={handleReparseOCR} title="Re-parse with smart heuristics">
+                    ⚡ Re-parse
+                  </button>
+                  <button className="btn btn-sm btn-primary" onClick={addItem}>+ Add Item</button>
+                </div>
               </div>
               
               <div className="review-table-container">
@@ -1541,26 +1590,70 @@ function ReviewEditor() {
 
               {/* Tax / charges section */}
               <div style={{ marginTop: 16, padding: 16, background: 'var(--bg-glass)', borderRadius: 'var(--radius-md)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Taxes & Additional Charges</span>
+                  <button type="button" className="btn btn-sm btn-ghost" style={{ fontSize: '0.8rem', padding: '4px 8px' }}
+                    onClick={() => setTaxes([...taxes, { name: 'GST', amountPaise: 0 }])}>
+                    + Add Tax
+                  </button>
+                </div>
                 {taxes.map((tax, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
                     <input className="input input-sm" value={tax.name} 
                       onChange={e => { const t = [...taxes]; t[idx].name = e.target.value; setTaxes(t); }}
-                      style={{ width: 120, background: 'transparent', border: 'none' }} />
-                    <span className="input-mono" style={{ color: 'var(--text-secondary)' }}>
-                      ₹{(tax.amountPaise / 100).toFixed(2)}
-                    </span>
+                      placeholder="Tax Name (e.g. GST)"
+                      style={{ flex: 1, minWidth: 120, background: 'transparent' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>₹</span>
+                      <input className="input input-sm input-mono" type="number" step="0.01"
+                        value={(tax.amountPaise / 100).toFixed(2)}
+                        onChange={e => {
+                          const t = [...taxes];
+                          t[idx].amountPaise = Math.round(parseFloat(e.target.value || 0) * 100);
+                          setTaxes(t);
+                        }}
+                        style={{ width: 85, textAlign: 'right' }} />
+                      <button type="button" className="btn btn-ghost btn-icon" style={{ fontSize: '0.75rem', padding: '2px 6px', color: 'var(--accent-red)' }}
+                        title="Delete tax" onClick={() => setTaxes(taxes.filter((_, i) => i !== idx))}>
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 ))}
                 {serviceCharge > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.85rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: '0.85rem' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Service Charge</span>
-                    <span className="input-mono">₹{(serviceCharge / 100).toFixed(2)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>₹</span>
+                      <input className="input input-sm input-mono" type="number" step="0.01"
+                        value={(serviceCharge / 100).toFixed(2)}
+                        onChange={e => setServiceCharge(Math.round(parseFloat(e.target.value || 0) * 100))}
+                        style={{ width: 85, textAlign: 'right' }} />
+                    </div>
+                  </div>
+                )}
+                {roundoff !== 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Adjustments / Round Off</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>₹</span>
+                      <input className="input input-sm input-mono" type="number" step="0.01"
+                        value={(roundoff / 100).toFixed(2)}
+                        onChange={e => setRoundoff(Math.round(parseFloat(e.target.value || 0) * 100))}
+                        style={{ width: 85, textAlign: 'right' }} />
+                    </div>
                   </div>
                 )}
                 {discount > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: '0.85rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: '0.85rem' }}>
                     <span style={{ color: 'var(--accent-emerald)' }}>Discount</span>
-                    <span className="input-mono" style={{ color: 'var(--accent-emerald)' }}>-₹{(discount / 100).toFixed(2)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ color: 'var(--accent-emerald)' }}>-₹</span>
+                      <input className="input input-sm input-mono" type="number" step="0.01"
+                        value={(discount / 100).toFixed(2)}
+                        onChange={e => setDiscount(Math.round(parseFloat(e.target.value || 0) * 100))}
+                        style={{ width: 85, textAlign: 'right', color: 'var(--accent-emerald)' }} />
+                    </div>
                   </div>
                 )}
                 <div style={{ borderTop: '1px solid var(--border-glass)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
@@ -1743,7 +1836,7 @@ function ReviewEditor() {
             let breakdown = null;
 
             if (splitMode === 'itemized') {
-              const result = calculateItemizedSplit({ items, taxes, serviceCharge, discount });
+              const result = calculateItemizedSplit({ items, taxes, serviceCharge, discount, roundoff });
               splits = result.splits;
               breakdown = result.breakdown;
             } else if (splitMode === 'equal') {
@@ -1833,6 +1926,75 @@ function ReviewEditor() {
           })()}
         </div>
       )}
+
+      {showRawOCR && (
+        <RawOCRModal
+          initialText={(() => {
+            try {
+              const ocr = JSON.parse(sessionStorage.getItem('ocrResult') || '{}');
+              return ocr.text || '';
+            } catch { return ''; }
+          })()}
+          onClose={() => setShowRawOCR(false)}
+          onApplyParsed={(parsed) => {
+            setItems(parsed.items || []);
+            if (parsed.taxes && parsed.taxes.length > 0) setTaxes(parsed.taxes);
+            if (parsed.serviceCharge !== undefined) setServiceCharge(parsed.serviceCharge || 0);
+            if (parsed.discount !== undefined) setDiscount(parsed.discount || 0);
+            if (parsed.roundoff !== undefined) setRoundoff(parsed.roundoff || 0);
+            if (parsed.total) setTotal(parsed.total);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===== RAW OCR MODAL =====
+function RawOCRModal({ initialText, onClose, onApplyParsed }) {
+  const [text, setText] = useState(initialText || '');
+  const toast = useToast();
+
+  const handleParse = () => {
+    try {
+      const parsed = parseReceipt(text);
+      if (parsed.items && parsed.items.length > 0) {
+        sessionStorage.setItem('ocrResult', JSON.stringify({ text }));
+        sessionStorage.setItem('parsedReceipt', JSON.stringify(parsed));
+        onApplyParsed(parsed);
+        toast(`Parsed ${parsed.items.length} items!`, 'success');
+        onClose();
+      } else {
+        toast('No items detected. Ensure lines follow: Item Name ... Price', 'warning');
+      }
+    } catch (err) {
+      toast('Parse error: ' + err.message, 'error');
+    }
+  };
+
+  return (
+    <div className="modal-backdrop animate-fadeIn" onClick={onClose} style={{ zIndex: 9999 }}>
+      <div className="modal glass-card" style={{ maxWidth: 640, width: '92%' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontWeight: 700 }}>📜 Raw OCR Text & Quick Fix</h3>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
+          View, edit, or paste OCR text directly. If the scanner missed any items due to camera lighting, you can fix them here and click <strong>&ldquo;Parse Items&rdquo;</strong>.
+        </p>
+        <textarea
+          className="input input-mono"
+          rows={14}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="Paste or edit receipt text here... e.g.&#10;1 MASALA COKE 200.00&#10;1 Tz's ELIXIR 200.00&#10;Gross Amount 3275.00"
+          style={{ width: '100%', fontSize: '0.85rem', lineHeight: 1.5, resize: 'vertical' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleParse}>⚡ Parse Items</button>
+        </div>
+      </div>
     </div>
   );
 }

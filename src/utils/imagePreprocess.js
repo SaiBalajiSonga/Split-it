@@ -35,33 +35,69 @@ export async function preprocessImage(source) {
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
   
-  // Step 1: Convert to grayscale
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    data[i] = data[i + 1] = data[i + 2] = gray;
+  // Step 1: Grayscale + Local Adaptive Thresholding (Bradley-Roth)
+  // Perfectly handles receipts on dark tables, uneven shadows, and faint thermal print
+  applyAdaptiveThreshold(data, width, height, 35, 10);
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * Bradley-Roth Adaptive Local Thresholding via Integral Image.
+ * Compares each pixel to its local s x s window to extract crisp black text
+ * regardless of background darkness, shadows, or lighting gradients.
+ */
+function applyAdaptiveThreshold(data, width, height, s = 35, t = 10) {
+  const gray = new Uint8Array(width * height);
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    gray[j] = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
   }
-  
-  // Step 2: Auto-contrast (stretch histogram)
-  let min = 255, max = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i] < min) min = data[i];
-    if (data[i] > max) max = data[i];
-  }
-  
-  const range = max - min;
-  if (range > 0 && range < 200) { // Only apply if contrast is low
-    for (let i = 0; i < data.length; i += 4) {
-      const normalized = ((data[i] - min) / range) * 255;
-      const value = Math.min(255, Math.max(0, Math.round(normalized)));
-      data[i] = data[i + 1] = data[i + 2] = value;
+
+  const integral = new Float64Array(width * height);
+  for (let y = 0; y < height; y++) {
+    let sum = 0;
+    const yOff = y * width;
+    const prevYOff = (y - 1) * width;
+    for (let x = 0; x < width; x++) {
+      sum += gray[yOff + x];
+      integral[yOff + x] = sum + (y > 0 ? integral[prevYOff + x] : 0);
     }
   }
-  
-  // Step 3: Slight sharpen for faded text
-  // Using simple unsharp mask approximation
-  ctx.putImageData(imageData, 0, 0);
-  
-  return canvas.toDataURL('image/png');
+
+  const s2 = Math.floor(s / 2);
+  const factor = (100 - t) / 100;
+
+  for (let y = 0; y < height; y++) {
+    const y1 = Math.max(0, y - s2);
+    const y2 = Math.min(height - 1, y + s2);
+    const yOff = y * width;
+    const y2Off = y2 * width;
+    const y1Off = y1 * width;
+
+    for (let x = 0; x < width; x++) {
+      const x1 = Math.max(0, x - s2);
+      const x2 = Math.min(width - 1, x + s2);
+      const count = (x2 - x1) * (y2 - y1);
+      const sum = integral[y2Off + x2] 
+                - integral[y1Off + x2] 
+                - integral[y2Off + x1] 
+                + integral[y1Off + x1];
+
+      const idx = yOff + x;
+      const pixelIdx = idx * 4;
+
+      if (gray[idx] * count <= sum * factor) {
+        data[pixelIdx] = 0;
+        data[pixelIdx + 1] = 0;
+        data[pixelIdx + 2] = 0;
+      } else {
+        data[pixelIdx] = 255;
+        data[pixelIdx + 1] = 255;
+        data[pixelIdx + 2] = 255;
+      }
+    }
+  }
 }
 
 /**

@@ -142,6 +142,10 @@ export function useOCR() {
         },
       });
 
+      await worker.setParameters({
+        preserve_interword_spaces: '1',
+      });
+
       workerRef.current = worker;
       setStatus('Processing receipt...');
       setProgress(30);

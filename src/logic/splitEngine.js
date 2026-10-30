@@ -30,7 +30,7 @@
  * @returns {Object} { splits: {memberId: amountPaise}, breakdown: {memberId: {items, tax, serviceCharge, discount, total}} }
  */
 export function calculateItemizedSplit(expense) {
-  const { items, taxes = [], serviceCharge = 0, discount = 0 } = expense;
+  const { items, taxes = [], serviceCharge = 0, discount = 0, roundoff = 0 } = expense;
   
   // 1. Calculate each member's item subtotal
   const memberItemSubtotals = {};
@@ -83,18 +83,30 @@ export function calculateItemizedSplit(expense) {
     participantIds.forEach((id, i) => { memberDiscount[id] = discShares[i]; });
   }
   
+  // 4b. Proportionally distribute roundoff / adjustments
+  const memberRoundoff = {};
+  participantIds.forEach(id => { memberRoundoff[id] = 0; });
+  
+  if (roundoff !== 0 && totalItemSubtotal > 0) {
+    const roShares = distributeProportionally(Math.abs(roundoff),
+      participantIds.map(id => memberItemSubtotals[id]), participantIds);
+    const sign = roundoff > 0 ? 1 : -1;
+    participantIds.forEach((id, i) => { memberRoundoff[id] = sign * roShares[i]; });
+  }
+  
   // 5. Compute final per-member total
   const splits = {};
   const breakdown = {};
   
   for (const id of participantIds) {
-    const total = memberItemSubtotals[id] + memberTax[id] + memberSC[id] - memberDiscount[id];
+    const total = memberItemSubtotals[id] + memberTax[id] + memberSC[id] - memberDiscount[id] + memberRoundoff[id];
     splits[id] = total;
     breakdown[id] = {
       items: memberItemSubtotals[id],
       tax: memberTax[id],
       serviceCharge: memberSC[id],
       discount: memberDiscount[id],
+      roundoff: memberRoundoff[id],
       total,
     };
   }

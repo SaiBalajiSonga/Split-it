@@ -1,4 +1,4 @@
-import { parseReceipt } from './src/logic/receiptParser.js';
+import { parseReceipt, validateTotal } from './src/logic/receiptParser.js';
 import { calculateItemizedSplit, calculateEqualSplit, calculatePercentageSplit, calculateSharesSplit, computeNetBalances } from './src/logic/splitEngine.js';
 import { simplifyDebts, verifySettlement } from './src/logic/debtSimplifier.js';
 import { formatCurrency, parseRupees, generateUPILink } from './src/utils/formatters.js';
@@ -174,7 +174,72 @@ assert(parsedBombay.items[4].name === 'MALABAR PARATHA' && parsedBombay.items[4]
 assert(parsedBombay.items[4].unitPricePaise === 9000, 'MALABAR PARATHA unit price = ₹90.00 (9000 paise)');
 assert(parsedBombay.subtotal === 249500, `Subtotal = ₹2,495.00 (got ${parsedBombay.subtotal})`);
 assert(parsedBombay.serviceCharge === 24950, `Service Charge = ₹249.50 (got ${parsedBombay.serviceCharge})`);
+assert(parsedBombay.roundoff === 76, `Adjustments = ₹0.76 (76 paise) (got ${parsedBombay.roundoff})`);
 assert(parsedBombay.total === 327500, `Gross Total = ₹3,275.00 (got ${parsedBombay.total})`);
+
+const val = validateTotal(parsedBombay);
+assert(val.valid === true, `Validation passes with ₹0 discrepancy (${val.message})`);
+
+// Ensure noisy table header lines are never parsed as items
+const noiseReceipt = parseReceipt({
+  text: `
+BILL NO: 00047224 TABLE : 20 120.00
+STL No i0002T224 TABLE 120.00
+1 MASALA COKE 200.00
+Total: 200.00
+`
+});
+assert(noiseReceipt.items.length === 1, `Noisy table header rejected: exactly 1 item parsed (got ${noiseReceipt.items.length})`);
+assert(noiseReceipt.items[0].name === 'MASALA COKE', 'Item is MASALA COKE');
+
+console.log('\n[8] Real-world Multi-Line Receipt (Absolute Barbecues):');
+const abText = `
+Absolute Barbecues
+AB's-POWAI
+Absolute Barbeque Pvt Ltd
+1st Floor, ATL Corporate Park, Saki Vihar
+Road, Powai,
+Mumbai, Maharashtra - 400072
+FoodandBeverages
+
+DRAFT Invoice (Split 1-FoodandBeverages)
+
+E1 (Pax - 8)
+
+Vedant
+
+DRAFT Invoice GABSPMY2679943 items (8 Qty)
+Oct 04 2026 11:08 PM Cashier AB's
+
+Masala Margarita
+1 @ 169/ea 169.00
+Water Btl
+3 @ 20/ea 60.00
+TT Dinner sun nvg
+4 @ 999.75/ea 3,999.00
+
+Sub Total 4,228.00
+CGST 2.5 2.5% on 4,228.00 105.70
+SGST 2.5 2.5% on 4,228.00 105.70
+
+Bill Total 4,439.40
+
+scd
+`;
+
+const parsedAB = parseReceipt({ text: abText });
+assert(parsedAB.items.length === 3, `Detected all 3 food/beverage items (got ${parsedAB.items.length})`);
+assert(parsedAB.items[0].name === 'Masala Margarita' && parsedAB.items[0].qty === 1 && parsedAB.items[0].totalPaise === 16900, 'Detected Masala Margarita qty 1 @ ₹169');
+assert(parsedAB.items[1].name === 'Water Btl' && parsedAB.items[1].qty === 3 && parsedAB.items[1].totalPaise === 6000, 'Detected Water Btl qty 3 @ ₹20 (₹60 total)');
+assert(parsedAB.items[2].name === 'TT Dinner sun nvg' && parsedAB.items[2].qty === 4 && parsedAB.items[2].totalPaise === 399900, 'Detected TT Dinner qty 4 @ ₹999.75 (₹3,999 total)');
+assert(parsedAB.taxes.length === 2, `Detected 2 GST taxes (got ${parsedAB.taxes.length})`);
+assert(parsedAB.taxes[0].name.includes('CGST') && parsedAB.taxes[0].amountPaise === 10570, 'Detected CGST 2.5% ₹105.70');
+assert(parsedAB.taxes[1].name.includes('SGST') && parsedAB.taxes[1].amountPaise === 10570, 'Detected SGST 2.5% ₹105.70');
+assert(parsedAB.subtotal === 422800, `Subtotal = ₹4,228.00 (got ${parsedAB.subtotal})`);
+assert(parsedAB.total === 443940, `Bill Total = ₹4,439.40 (got ${parsedAB.total})`);
+
+const valAB = validateTotal(parsedAB);
+assert(valAB.valid === true, `Validation passes with ₹0 discrepancy (${valAB.message})`);
 
 console.log(`\n========================================`);
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`);
