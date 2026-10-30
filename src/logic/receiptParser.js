@@ -16,6 +16,46 @@
 import { generateId } from '../db/database.js';
 import { classifyItemFast } from './categorizer.js';
 
+// Month map for text dates
+const MONTHS = {
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+};
+
+/**
+ * Parses and normalizes dates from text into ISO 8601 (YYYY-MM-DD).
+ */
+export function parseDateToISO(text) {
+  if (!text) return null;
+  const dmyMatch = text.match(/\b(0?[1-9]|[12]\d|3[01])[\/\-\.](0?[1-9]|1[012])[\/\-\.](20\d\d|19\d\d|\d{2})\b/);
+  if (dmyMatch) {
+    let year = dmyMatch[3];
+    if (year.length === 2) year = (parseInt(year, 10) > 50 ? '19' : '20') + year;
+    const month = dmyMatch[2].padStart(2, '0');
+    const day = dmyMatch[1].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const ymdMatch = text.match(/\b(20\d\d|19\d\d)[\/\-\.](0?[1-9]|1[012])[\/\-\.](0?[1-9]|[12]\d|3[01])\b/);
+  if (ymdMatch) {
+    const year = ymdMatch[1];
+    const month = ymdMatch[2].padStart(2, '0');
+    const day = ymdMatch[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const textDateMatch = text.match(/\b(0?[1-9]|[12]\d|3[01])[\s\-\.]([A-Za-z]{3,9})[\s\-\.](20\d\d|19\d\d|\d{2})\b/);
+  if (textDateMatch) {
+    const mStr = textDateMatch[2].substring(0, 3).toLowerCase();
+    if (MONTHS[mStr]) {
+      let year = textDateMatch[3];
+      if (year.length === 2) year = (parseInt(year, 10) > 50 ? '19' : '20') + year;
+      const month = MONTHS[mStr];
+      const day = textDateMatch[1].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  }
+  return null;
+}
+
 // ===== REGEX PATTERNS =====
 
 // Matches a price at or near the end of a line (allows optional short trailing OCR noise like "200.00 ha", "225.00 Bo", "325.00 v", "360.00 |")
@@ -422,6 +462,73 @@ export function parseReceipt(ocrResult) {
   const disc = discount || 0;
   const computed = itemsTotal + taxTotal + sc - disc + roundoff;
 
+  // Extract Merchant / Company
+  let merchant = '';
+  const COMPANY_SUFFIX_RE = /\b(sdn\s*bhd|bhd|enterprise|trading|restoran|restaurant|cafe|canteen|bakeries|hardware|marketing|solutions|technologies|services|supermarket|mart|store|retail|pvt\s*ltd|ltd|limited|inc|corp|co\.)\b/i;
+  const NOISE_HEADER_RE = /\b(reprint|copy|tax\s*invoice|receipt|invoice|bill\s*no|table|order|date|time|shift|covers?|cashier|sales\s*person|bill\s*to|address|tel|fax|email|phone|mob|gstin|fssai|roc\s*no|welcome|thank)\b/i;
+  const headerLines = lines.slice(0, 12);
+  for (const line of headerLines) {
+    const t = (line.text || line || '').trim();
+    if (COMPANY_SUFFIX_RE.test(t) && !NOISE_HEADER_RE.test(t)) {
+      merchant = t.replace(/^[#*=\-_~+\s\d\.\/]+/, '').replace(/\s*[#*=\-_~+]+$/, '').trim();
+      merchant = merchant.replace(/^0([A-Z]{2,}\b)/, 'O$1');
+      merchant = merchant.replace(/\s+[a-zA-Z]{1,2}$/, '').trim();
+      break;
+    }
+  }
+  if (!merchant) {
+    for (const line of headerLines) {
+      const t = (line.text || line || '').trim();
+      if (NOISE_HEADER_RE.test(t) || /^[\d\s\-\.\/:,=]+$/.test(t) || /no\s*\d+|jalan|street|road|floor|bldg/i.test(t)) continue;
+      if (t.length >= 3 && t.length <= 40) {
+        merchant = t.replace(/^[#*=\-_~+\s\d\.\/]+/, '').replace(/\s*[#*=\-_~+]+$/, '').trim();
+        merchant = merchant.replace(/\s+[a-zA-Z]{1,2}$/, '').trim();
+        break;
+      }
+    }
+  }
+
+  // Extract Date
+  let date = '';
+  for (const line of lines) {
+    const t = line.text || line || '';
+    const iso = parseDateToISO(t);
+    if (iso) {
+      date = iso;
+      break;
+    }
+  }
+
+  // Extract Address
+  let address = '';
+  const addrKeywords = /\b(jalan|jln|street|st\b|road|rd\b|avenue|ave\b|block|blk\b|floor|flr\b|building|bldg|taman|bandar|seri|alam|masai|johor|kuala lumpur|selangor|mumbai|delhi|bangalore)\b/i;
+  const addrCandidates = [];
+  for (let i = 0; i < Math.min(lines.length, 12); i++) {
+    const t = (lines[i].text || lines[i] || '').trim();
+    if (addrKeywords.test(t) && !/invoice|bill\s*no|order/i.test(t)) {
+      addrCandidates.push(t);
+    }
+  }
+  if (addrCandidates.length > 0) address = addrCandidates.join(', ');
+
+  // Extract Currency
+  let currency = 'USD';
+  if (/₹|rs\.?|inr\b|rupees?/i.test(rawText) || /mumbai|delhi|bangalore|pune|kolkata|gstin/i.test(rawText)) {
+    currency = 'INR';
+  } else if (/rm\b|sdn\s*bhd|jalan|taman|selangor|kuala lumpur|ringgit/i.test(rawText)) {
+    currency = 'MYR';
+  } else if (/€|eur\b/i.test(rawText)) {
+    currency = 'EUR';
+  } else if (/£|gbp\b/i.test(rawText)) {
+    currency = 'GBP';
+  }
+
+  // Populate unit_price and line_total on items for contract compatibility
+  items.forEach(it => {
+    if (it.unit_price === undefined) it.unit_price = +(it.unitPricePaise / 100).toFixed(2);
+    if (it.line_total === undefined) it.line_total = +(it.totalPaise / 100).toFixed(2);
+  });
+
   // If detected total is missing or completely unreasonable (< subtotal or > computed * 1.35), auto-correct to computed!
   if (
     total === null ||
@@ -432,14 +539,38 @@ export function parseReceipt(ocrResult) {
     total = computed;
   }
 
+  const warnings = [];
+  let isArithValid = true;
+  if (total !== null && itemsTotal > 0) {
+    const diff = Math.abs(total - computed);
+    if (diff > 100) {
+      isArithValid = false;
+      warnings.push(`Arithmetic discrepancy: sum of items (${(itemsTotal / 100).toFixed(2)}) + tax (${(taxTotal / 100).toFixed(2)}) != total (${(total / 100).toFixed(2)})`);
+    }
+  }
+
   return {
+    merchant: merchant || 'Unknown Merchant',
+    date: date || '',
+    address: address || '',
+    currency,
     items,
     subtotal: subtotal || itemsTotal,
     taxes,
-    serviceCharge,
+    tax: +(taxTotal / 100).toFixed(2),
+    serviceCharge: sc,
+    service_charge: +(sc / 100).toFixed(2),
     discount,
     roundoff,
+    tip: 0,
     total,
+    confidence: {
+      merchant: merchant ? 0.90 : 0.20,
+      date: date ? 0.95 : 0.10,
+      total: total ? (isArithValid ? 0.95 : 0.60) : 0.0,
+      items: items.length > 0 ? 0.85 : 0.0,
+    },
+    warnings,
     rawText,
   };
 }

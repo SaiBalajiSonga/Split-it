@@ -1,0 +1,23 @@
+{
+  "merchant": "THE BOMBAY CANTEEN",
+  "company": "THE BOMBAY CANTEEN",
+  "date": "2016-05-21",
+  "address": "INDIAN CAFE & BAR",
+  "currency": "INR",
+  "subtotal": 2495.00,
+  "service_charge": 249.50,
+  "tax": 229.74,
+  "total": "3275.00",
+  "totalPaise": 327500,
+  "items": [
+    { "name": "MASALA COKE", "qty": 1, "unit_price": 200.00, "line_total": 200.00, "total": 200.00, "totalPaise": 20000 },
+    { "name": "TZ'S ELIXIR", "qty": 1, "unit_price": 200.00, "line_total": 200.00, "total": 200.00, "totalPaise": 20000 },
+    { "name": "CHETTINAD PRAWNS ALI-YOL", "qty": 1, "unit_price": 400.00, "line_total": 400.00, "total": 400.00, "totalPaise": 40000 },
+    { "name": "B**F FRY", "qty": 1, "unit_price": 375.00, "line_total": 375.00, "total": 375.00, "totalPaise": 37500 },
+    { "name": "MALABAR PARATHA", "qty": 3, "unit_price": 90.00, "line_total": 270.00, "total": 270.00, "totalPaise": 27000 },
+    { "name": "BARLEY SALAD", "qty": 1, "unit_price": 225.00, "line_total": 225.00, "total": 225.00, "totalPaise": 22500 },
+    { "name": "MUTTON CURRY", "qty": 1, "unit_price": 325.00, "line_total": 325.00, "total": 325.00, "totalPaise": 32500 },
+    { "name": "COFFEE RASGULLA", "qty": 1, "unit_price": 350.00, "line_total": 350.00, "total": 350.00, "totalPaise": 35000 },
+    { "name": "MANGO TRIFLE (SINGLE)", "qty": 1, "unit_price": 150.00, "line_total": 150.00, "total": 150.00, "totalPaise": 15000 }
+  ]
+}

@@ -90,7 +90,8 @@ export async function loadClassifierModel(onProgress) {
   isModelLoading = true;
   try {
     if (!pipelineRef) {
-      const { pipeline, env } = await import('@xenova/transformers');
+      const moduleName = '@xenova/transformers';
+      const { pipeline, env } = await import(/* @vite-ignore */ moduleName);
       env.allowLocalModels = false;
       env.useBrowserCache = true;
       pipelineRef = pipeline;
