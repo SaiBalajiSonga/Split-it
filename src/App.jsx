@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HashRouter, Routes, Route, useNavigate, useParams, Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import { ToastProvider, useToast, useGroups, useExpenses, useOCR, useCamera } from './hooks/useAppHooks';
-import { parseReceipt, validateTotal, formatRupees } from './logic/receiptParser';
+import { parseReceipt, validateTotal } from './logic/receiptParser';
 import { calculateItemizedSplit, calculateEqualSplit, calculatePercentageSplit, calculateSharesSplit, computeNetBalances } from './logic/splitEngine';
 import { simplifyDebts } from './logic/debtSimplifier';
 import { formatCurrency, formatDate, formatRelativeTime, getInitials, getMemberColor, CATEGORIES, generateUPILink } from './utils/formatters';
@@ -271,7 +271,7 @@ function GroupView() {
   const { groupId } = useParams();
   const [group, setGroup] = useState(null);
   const [activeTab, setActiveTab] = useState('expenses');
-  const { expenses, loading: expLoading, removeExpense, refresh: refreshExpenses } = useExpenses(groupId);
+  const { expenses, loading: expLoading, removeExpense } = useExpenses(groupId);
   const navigate = useNavigate();
   const toast = useToast();
   const [showFab, setShowFab] = useState(false);
@@ -465,9 +465,10 @@ function ExpensesTab({ expenses, loading, group, onDelete }) {
       {expenses.map(exp => {
         const payer = group.members.find(m => m.id === exp.payerId);
         const memberIdx = group.members.findIndex(m => m.id === exp.payerId);
+        const payerColor = payer?.color || (memberIdx >= 0 ? getMemberColor(memberIdx) : 'var(--accent-violet)');
         return (
           <div key={exp.id} className="expense-item">
-            <div className="expense-icon" style={{ background: `rgba(124, 58, 237, 0.15)` }}>
+            <div className="expense-icon" style={{ background: payerColor, color: '#fff' }}>
               {exp.receiptImageDataUrl ? '🧾' : '✏️'}
             </div>
             <div className="expense-details">
@@ -706,11 +707,6 @@ function SettleTab({ expenses, members, groupId, group }) {
           const settled = isSettled(tx);
           const fromIdx = members.indexOf(from);
           const toIdx = members.indexOf(to);
-          const upiLink = generateUPILink({
-            payeeName: to?.name || '',
-            amount: tx.amountPaise,
-            note: `SplitSmart - ${group?.name || 'Settlement'}`,
-          });
 
           return (
             <div key={i} className={`settlement-card ${settled ? 'settled' : ''}`}>
@@ -1221,8 +1217,17 @@ function ReceiptScanner() {
       {showCamera && (
         <div className="animate-fadeIn">
           <div className="scanner-preview">
-            <video ref={videoRef} autoPlay playsInline style={{ width: '100%', display: 'block' }}
-              ref={el => { if (el && stream) { el.srcObject = stream; videoRef.current = el; } }} />
+            <video
+              ref={el => {
+                videoRef.current = el;
+                if (el && stream && el.srcObject !== stream) {
+                  el.srcObject = stream;
+                }
+              }}
+              autoPlay
+              playsInline
+              style={{ width: '100%', display: 'block' }}
+            />
             <div className="scanner-preview-actions">
               <button className="btn btn-ghost" onClick={() => { stopCamera(); setShowCamera(false); }}>Cancel</button>
               <button className="btn btn-primary btn-lg" onClick={handleCameraCapture}>📸 Capture</button>
@@ -1383,7 +1388,7 @@ function ReviewEditor() {
       splits = result.splits;
     }
 
-    const expense = await addExpense({
+    await addExpense({
       description: description || 'Receipt Expense',
       totalPaise: totalPaise || total,
       payerId: payer,
@@ -1820,7 +1825,6 @@ function ManualExpense() {
   const [amount, setAmount] = useState('');
   const [payer, setPayer] = useState('');
   const [participants, setParticipants] = useState([]);
-  const [splitMode, setSplitMode] = useState('equal');
   const { addExpense } = useExpenses(groupId);
 
   useEffect(() => {
